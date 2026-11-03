@@ -1,0 +1,19 @@
+{
+  "id": "TASK-003",
+  "title": "Gateway WebSocket /ws/agent, xác thực runner, đăng ký máy (TASK-03 + phần WS của FEAT-01)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-03T22:52:15",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-003-gateway-ws/verify.sh",
+    "internal/gateway/gateway_test.go",
+    "internal/gateway/register_test.go",
+    "internal/dispatcher/types.go"
+  ]
+}
