@@ -14,6 +14,7 @@ import (
 	"github.com/namth/agenthub/internal/database"
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
+	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
 	"github.com/namth/agenthub/web"
 )
@@ -49,6 +50,10 @@ func configFromEnv() dispatcher.Config {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "runner" {
+		os.Exit(runner.Main(os.Args[2:]))
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

@@ -1,18 +1,39 @@
 {
   "id": "TASK-004",
   "title": "Runner daemon agenthub runner: kết nối gateway, chạy CLI, bàn giao khi hết limit (TASK-04 + TASK-12)",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "54f07a84-5b40-47e8-8090-5345df8c372d",
   "history": [
     {
       "at": "2026-11-04T04:11:53",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T04:17:09",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T04:17:29",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T04:42:13",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T04:42:27",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-004-runner/verify.sh",
     "internal/runner/runner_test.go",
     "internal/runner/integration_test.go"
-  ]
+  ],
+  "via": "agy"
 }

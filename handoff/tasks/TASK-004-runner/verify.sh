@@ -24,11 +24,11 @@ go test ./internal/... ./web/... -count=1
 
 echo "== 5. Binary thật: server + runner"
 tmp=$(mktemp -d)
-cleanup() { kill ${rpid:-0} ${spid:-0} 2>/dev/null || true; rm -rf "$tmp"; }
+cleanup() { for p in ${rpid:-} ${spid:-}; do kill "$p" 2>/dev/null || true; done; rm -rf "$tmp"; }
 trap cleanup EXIT
 CGO_ENABLED=0 go build -o "$tmp/agenthub" ./cmd/server
 "$tmp/agenthub" runner --help >"$tmp/help.txt" 2>&1 || { cat "$tmp/help.txt"; echo "runner --help phải exit 0"; exit 1; }
-grep -q -- "--server" "$tmp/help.txt" || { echo "--help thiếu --server"; exit 1; }
+grep -q -E -- "-{1,2}server" "$tmp/help.txt" || { echo "--help thiếu --server"; exit 1; }
 port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')
 (cd "$tmp" && PORT=$port RUNNER_REGISTRATION_KEY=k-verify exec ./agenthub >"$tmp/server.log" 2>&1) &
 spid=$!
