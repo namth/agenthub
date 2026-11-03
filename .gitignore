@@ -10,3 +10,4 @@ data/*.db-*
 web/node_modules/
 /agenthub
 .DS_Store
+bin/

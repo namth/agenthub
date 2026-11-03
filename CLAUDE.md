@@ -20,3 +20,4 @@ Nền tảng điều phối đa AI agent phân tán: server Go (single binary + 
 - Trả lời và viết tài liệu bằng tiếng Việt có dấu; giữ nguyên thuật ngữ kỹ thuật, tên biến, lệnh.
 - Mã TASK/TC/BR/SCR/DEC/FEAT phải khớp chéo giữa `docs/11`, `docs/12`, `docs/13`, `docs/14` và `docs/features/`.
 - Không commit/push khi người dùng chưa đồng ý.
+- Giao việc sang nhiều máy: theo mục "Phối hợp nhiều máy" trong `~/.claude/CLAUDE.md` — luôn bọc lệnh dài bằng `caffeinate -ims` ở máy chạy lệnh, tự nhả khi xong.
