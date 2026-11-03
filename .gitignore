@@ -1,0 +1,12 @@
+# Bí mật & dữ liệu cục bộ (docs/10)
+.env
+data/*.db
+data/*.db-*
+
+# Worktree tạm của runner
+.worktrees/
+
+# Build
+web/node_modules/
+/agenthub
+.DS_Store

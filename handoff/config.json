@@ -1,0 +1,10 @@
+{
+  "protected_paths": [
+    "docs/",
+    "CONTEXT.md",
+    "CLAUDE.md"
+  ],
+  "agy_model": null,
+  "agy_fallback_models": [],
+  "agy_timeout": "60m"
+}
