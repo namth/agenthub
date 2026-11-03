@@ -10,10 +10,25 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// Mount gắn thêm một handler (gateway, đăng ký máy…) vào router.
+type Mount struct {
+	Method  string // rỗng = mọi method
+	Pattern string
+	Handler http.Handler
+}
+
 // New creates and returns the HTTP handler for AgentHub.
-func New(db *sql.DB, static fs.FS) http.Handler {
+func New(db *sql.DB, static fs.FS, mounts ...Mount) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+
+	for _, m := range mounts {
+		if m.Method == "" {
+			r.Handle(m.Pattern, m.Handler)
+		} else {
+			r.Method(m.Method, m.Pattern, m.Handler)
+		}
+	}
 
 	// API Health check
 	r.Get("/api/health", func(w http.ResponseWriter, req *http.Request) {
