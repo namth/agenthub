@@ -77,6 +77,11 @@
 - **Bối cảnh:** `docs/08` cũ map `write` → `ADMIN`, mâu thuẫn `docs/02` (ADMIN = Owner/Maintainer); mọi collaborator có quyền ghi sẽ duyệt được task và trao/thu hồi lead.
 - **Quyết định:** `admin`, `maintain` → `ADMIN`; `write`, `triage`, `read` → `PARTNER`.
 
+## DEC-10: Runner viết bằng Go, chung binary với server
+- **Ngày:** 2026-11-03 · **Trạng thái:** CHỐT
+- **Quyết định:** Runner daemon là lệnh con `agenthub runner --server <url> --token <token>` trong cùng binary; code ở `internal/runner/`. Bỏ phương án `runner/runner.py`.
+- **Lý do:** cài máy con chỉ cần chép 1 file; dùng chung kiểu bản tin với gateway; test chung bộ Go; đúng tinh thần single binary (DEC/docs 05 §2).
+
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.
 - **FEAT-04 Đa dự án song song:** GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.

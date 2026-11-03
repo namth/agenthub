@@ -34,7 +34,7 @@ agenthub/
 ├── web/                          # Frontend source code (Vite + React + Tailwind)
 │   ├── dist/                     # Build output được nhúng vào Go qua go:embed
 │   └── src/                      # Kanban, Fleet Monitor, Live Terminal
-├── runner/                       # Daemon client chạy ngầm trên từng máy con (Python/Go)
+│   (internal/runner/)            # Runner daemon máy con, lệnh `agenthub runner` (DEC-10)
 ├── docs/                         # Bộ 14 tài liệu + docs/features/
 └── CONTEXT.md                    # File này
 ```

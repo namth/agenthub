@@ -39,9 +39,7 @@ agenthub/
 │   │   ├── hooks/                # useWebSocket, useAuth
 │   │   └── App.tsx
 │   └── dist/                     # Thư mục build được Go nhúng (go:embed)
-├── runner/                       # Daemon client chạy ngầm trên máy con
-│   ├── runner.py                 # Runner script (~150 dòng Python)
-│   └── requirements.txt
+│   └── runner/                   # Runner daemon máy con (lệnh `agenthub runner`, DEC-10)
 ├── docs/                         # Bộ 14 tài liệu kỹ thuật + docs/features/
 ├── CONTEXT.md                    # Root Context
 ├── go.mod

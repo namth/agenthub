@@ -28,8 +28,8 @@
 - [ ] **TASK-03: Xây dựng WebSocket Hub & Protocol**
   - **Mô tả:** Viết package `internal/gateway`, xử lý Handshake, Ping/Pong 15s, và đăng ký danh sách agent của từng máy (`agents[]` trong HANDSHAKE).
   - **DoD:** Viết unit test giả lập 5 clients kết nối đồng thời, gửi ping và nhận pong trong < 10ms.
-- [ ] **TASK-04: Xây dựng Script `runner.py` trên máy con**
-  - **Mô tả:** Script Python kết nối vào WebSocket server, nhận task, chạy lệnh CLI qua `subprocess`, bắt stdout và stream ngược về server.
+- [ ] **TASK-04: Runner daemon `agenthub runner` trên máy con (Go, DEC-10)**
+  - **Mô tả:** Lệnh con Go kết nối vào WebSocket server, nhận task, chạy lệnh CLI qua `subprocess`, bắt stdout và stream ngược về server.
   - **DoD:** Khi server bắn lệnh `ASSIGN_TASK`, máy con tự động tạo worktree trong `.worktrees/`, chạy lệnh test và xóa worktree khi xong.
 
 - [ ] **TASK-10: Schema Agent, Job, Lease (FEAT-01)**
