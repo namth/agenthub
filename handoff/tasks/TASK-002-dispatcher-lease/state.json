@@ -1,18 +1,55 @@
 {
   "id": "TASK-002",
   "title": "Dispatcher: hàng đợi job, lease trưởng phòng, fencing, cooldown (TASK-11)",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "e7a84e72-869c-45d8-9afc-6591262c6efb",
   "history": [
     {
       "at": "2026-11-03T22:51:05",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-03T22:52:06",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-03T22:52:41",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-03T23:15:28",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-03T23:17:39",
+      "status": "changes_requested",
+      "note": "Claude yêu cầu sửa"
+    },
+    {
+      "at": "2026-11-03T23:17:59",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-03T23:21:09",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-03T23:22:01",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-002-dispatcher-lease/verify.sh",
     "internal/dispatcher/dispatcher_test.go",
+    "internal/dispatcher/dispatcher_events_test.go",
     "internal/dispatcher/types.go"
-  ]
+  ],
+  "via": "agy"
 }
