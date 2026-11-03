@@ -1,0 +1,30 @@
+{
+  "id": "TASK-001",
+  "title": "Nền Go + SQLite schema đầy đủ + single binary (TASK-01, TASK-02, phần bảng TASK-10)",
+  "status": "in_progress",
+  "conversation_id": "8d9a4803-9b63-4973-8b3b-36e5969ba4e3",
+  "history": [
+    {
+      "at": "2026-11-03T22:26:49",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-03T22:28:48",
+      "status": "assigned",
+      "note": "giao qua agy (model mặc định)"
+    },
+    {
+      "at": "2026-11-03T22:30:14",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-001-nen-go-sqlite/verify.sh",
+    "internal/database/db_test.go",
+    "internal/server/server_test.go",
+    "web/embed_test.go"
+  ],
+  "via": "agy"
+}

@@ -1,0 +1,28 @@
+# Chốt chặn 1 của QA Gate (docs/13 mục 2): build, vet, test cho mọi PR vào main.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal web)"
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test ./... -count=1
+      - name: build (CGO tắt)
+        run: CGO_ENABLED=0 go build -o agenthub ./cmd/server

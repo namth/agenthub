@@ -68,10 +68,12 @@ flowchart TB
 Để đạt tiêu chí "nhẹ nhất và ổn nhất", AgentHub loại bỏ hoàn toàn các phụ thuộc phức tạp (Docker daemon, Nginx reverse proxy, Node.js server):
 
 1. **Frontend Compilation:** Frontend React/Vite được build ra thư mục tĩnh `/web/dist`.
-2. **Go Embedding:** File `cmd/server/main.go` sử dụng chỉ thị:
+2. **Go Embedding:** `go:embed` không dùng được đường dẫn `..`, nên chỉ thị nằm trong package `web` (file `web/embed.go`), `cmd/server` chỉ gọi `web.Static()`:
    ```go
-   //go:embed all:web/dist
-   var embeddedFrontend embed.FS
+   //go:embed all:dist
+   var dist embed.FS
+
+   func Static() fs.FS { sub, _ := fs.Sub(dist, "dist"); return sub }
    ```
 3. **Zero CGO SQLite:** Sử dụng package `modernc.org/sqlite` (trình biên dịch C sang thuần Go), cho phép biên dịch chéo (cross-compile) ra file nhị phân chạy trên Linux/macOS/Windows mà không cần cài gcc hay thư viện C.
 4. **Kết quả:** File `agenthub` kích thước khoảng ~20MB, khởi động trong 10 mili-giây, chiếm ~20MB RAM khi chạy.
