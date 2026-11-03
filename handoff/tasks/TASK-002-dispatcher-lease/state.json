@@ -1,0 +1,18 @@
+{
+  "id": "TASK-002",
+  "title": "Dispatcher: hàng đợi job, lease trưởng phòng, fencing, cooldown (TASK-11)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-03T22:51:05",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-002-dispatcher-lease/verify.sh",
+    "internal/dispatcher/dispatcher_test.go",
+    "internal/dispatcher/types.go"
+  ]
+}
