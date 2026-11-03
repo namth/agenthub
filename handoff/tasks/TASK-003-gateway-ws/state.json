@@ -1,13 +1,33 @@
 {
   "id": "TASK-003",
   "title": "Gateway WebSocket /ws/agent, xác thực runner, đăng ký máy (TASK-03 + phần WS của FEAT-01)",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "935edad1-3309-45eb-905d-02bb3177c415",
   "history": [
     {
       "at": "2026-11-03T22:52:15",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-03T23:24:39",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-03T23:25:00",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-03T23:39:40",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-03T23:39:46",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
@@ -15,5 +35,6 @@
     "internal/gateway/gateway_test.go",
     "internal/gateway/register_test.go",
     "internal/dispatcher/types.go"
-  ]
+  ],
+  "via": "agy"
 }

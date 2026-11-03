@@ -167,22 +167,80 @@ func send(t *testing.T, c *websocket.Conn, v any) {
 	}
 }
 
+// Mỗi kết nối có một goroutine đọc riêng: gorilla làm hỏng kết nối sau một lần
+// đọc quá deadline, nên test không đặt deadline trực tiếp lên conn.
+type inbox struct {
+	ch     chan []byte
+	closed chan struct{}
+}
+
+var inboxes sync.Map // *websocket.Conn → *inbox
+
+func boxOf(c *websocket.Conn) *inbox {
+	if b, ok := inboxes.Load(c); ok {
+		return b.(*inbox)
+	}
+	b := &inbox{ch: make(chan []byte, 1024), closed: make(chan struct{})}
+	if actual, loaded := inboxes.LoadOrStore(c, b); loaded {
+		return actual.(*inbox)
+	}
+	go func() {
+		defer close(b.closed)
+		for {
+			_, raw, err := c.ReadMessage()
+			if err != nil {
+				return
+			}
+			b.ch <- raw
+		}
+	}()
+	return b
+}
+
+func recvRaw(t *testing.T, c *websocket.Conn) []byte {
+	t.Helper()
+	b := boxOf(c)
+	select {
+	case raw := <-b.ch:
+		return raw
+	case <-b.closed:
+		t.Fatal("recv: kết nối đã đóng")
+	case <-time.After(3 * time.Second):
+		t.Fatal("recv: hết giờ chờ bản tin")
+	}
+	return nil
+}
+
 func recv(t *testing.T, c *websocket.Conn) map[string]any {
 	t.Helper()
-	c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	var m map[string]any
-	if err := c.ReadJSON(&m); err != nil {
-		t.Fatalf("recv: %v", err)
+	raw := recvRaw(t, c)
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("recv: không phải JSON: %s", raw)
 	}
 	return m
 }
 
 func silent(t *testing.T, c *websocket.Conn) {
 	t.Helper()
-	c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
-	var m map[string]any
-	if err := c.ReadJSON(&m); err == nil {
-		t.Fatalf("không được nhận gì, nhận %v", m)
+	select {
+	case raw := <-boxOf(c).ch:
+		t.Fatalf("không được nhận gì, nhận %s", raw)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func closedSoon(t *testing.T, c *websocket.Conn, what string) {
+	t.Helper()
+	b := boxOf(c)
+	for {
+		select {
+		case <-b.ch:
+		case <-b.closed:
+			return
+		case <-time.After(2 * time.Second):
+			t.Fatal(what)
+		}
 	}
 }
 
@@ -418,10 +476,7 @@ func TestReconnectReplacesOldConnection(t *testing.T) {
 	r := newRig(t)
 	old := r.join("tok-a", "CLAUDE")
 	_ = r.join("tok-a", "CLAUDE")
-	old.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, _, err := old.ReadMessage(); err == nil {
-		t.Fatal("kết nối cũ của cùng máy phải bị đóng")
-	}
+	closedSoon(t, old, "kết nối cũ của cùng máy phải bị đóng")
 	if r.api.has("Disconnect a") {
 		t.Fatal("thay kết nối cũ không được gọi Disconnect (máy vẫn đang online)")
 	}
@@ -487,11 +542,7 @@ func TestEnvelopeIsFlatJSON(t *testing.T) {
 	r := newRig(t)
 	c := r.join("tok-a", "CLAUDE")
 	send(t, c, map[string]any{"event": "PING", "timestamp": 1})
-	c.SetReadDeadline(time.Now().Add(3 * time.Second))
-	_, raw, err := c.ReadMessage()
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := recvRaw(t, c)
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil || m["event"] == nil {
 		t.Fatalf("bản tin phải là object JSON phẳng có trường event: %s", raw)
