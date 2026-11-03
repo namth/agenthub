@@ -1,8 +1,8 @@
 {
   "id": "TASK-001",
   "title": "Nền Go + SQLite schema đầy đủ + single binary (TASK-01, TASK-02, phần bảng TASK-10)",
-  "status": "in_progress",
-  "conversation_id": "8d9a4803-9b63-4973-8b3b-36e5969ba4e3",
+  "status": "accepted",
+  "conversation_id": "f7ae04b0-e79d-4ab4-a947-8ad910fd8eaa",
   "history": [
     {
       "at": "2026-11-03T22:26:49",
@@ -18,6 +18,16 @@
       "at": "2026-11-03T22:30:14",
       "status": "in_progress",
       "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-03T22:43:45",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-03T22:44:35",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
