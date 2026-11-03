@@ -342,7 +342,9 @@ func TestLeadReleaseAndActions(t *testing.T) {
 	send(t, c, map[string]any{"event": "LEAD_RELEASE", "agent_id": "a/claude", "epoch": 4, "reason": "SOFT_LIMIT"})
 	send(t, c, map[string]any{"event": "LEAD_ACTION", "agent_id": "a/claude", "epoch": 4, "action": "NOTE",
 		"data": map[string]any{"task_id": "t1", "note": "ưu tiên"}})
-	eventually(t, func() bool { return r.api.has("Release a a/claude 4") && r.api.has("LeadNote a a/claude 4 t1 ưu tiên") }, "Release và LeadNote")
+	eventually(t, func() bool {
+		return r.api.has("Release a a/claude 4") && r.api.has("LeadNote a a/claude 4 t1 ưu tiên")
+	}, "Release và LeadNote")
 	send(t, c, map[string]any{"event": "LEAD_ACTION", "agent_id": "a/claude", "epoch": 4, "action": "REPRIORITIZE", "data": map[string]any{}})
 	if m := recv(t, c); m["event"] != "ERROR" || m["code"] != "UNSUPPORTED" {
 		t.Fatalf("nhận %v, muốn ERROR UNSUPPORTED", m)
@@ -352,7 +354,9 @@ func TestLeadReleaseAndActions(t *testing.T) {
 func TestDomainErrorsMapped(t *testing.T) {
 	r := newRig(t)
 	r.api.submit = func(w, aid string) error { return fmt.Errorf("submit: %w", dispatcher.ErrStaleAssignment) }
-	r.api.renew = func(w, a string, e int64) (dispatcher.Lease, error) { return dispatcher.Lease{}, dispatcher.ErrStaleEpoch }
+	r.api.renew = func(w, a string, e int64) (dispatcher.Lease, error) {
+		return dispatcher.Lease{}, dispatcher.ErrStaleEpoch
+	}
 	r.api.exhausted = func(w, a, aid string, _ *time.Time) error {
 		if a == "x/claude" {
 			return dispatcher.ErrAgentNotOwned
