@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
+import AddMachineDialog from '../components/AddMachineDialog';
 
 export interface LeadState {
   state: 'HELD' | 'VACANT';
@@ -22,12 +23,22 @@ export interface Agent {
   soft_max_jobs: number | null;
   soft_window_hours: number;
   jobs_in_window: number;
+  lead_eligible?: boolean;
+  projects?: string[] | null;
   current_job: {
     job_id: string;
     task_id: string;
     kind: string;
     attempt: number;
+    project_id?: string;
+    project?: string;
+    task_title?: string;
   } | null;
+}
+
+export interface Owner {
+  id: string;
+  login: string;
 }
 
 export interface Worker {
@@ -36,11 +47,29 @@ export interface Worker {
   os: string;
   conn_status: 'ONLINE' | 'OFFLINE';
   offline_since: string | null;
+  owner?: Owner | null;
+  version?: string;
+  paused?: boolean;
   agents: Agent[];
 }
 
 export interface FleetData {
   lead: LeadState;
+  workers: Worker[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  github_repo: string;
+  status: string;
+  role: string;
+}
+
+interface OwnerGroup {
+  key: string;
+  testId: string;
+  title: string;
   workers: Worker[];
 }
 
@@ -61,9 +90,11 @@ function LedDot({ status }: { status: 'ONLINE' | 'OFFLINE' | 'IDLE' | 'BUSY' | '
 
 export default function Fleet() {
   const [data, setData] = useState<FleetData | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const fetchFleet = useCallback(async () => {
     setLoading(true);
@@ -87,6 +118,12 @@ export default function Fleet() {
   useEffect(() => {
     fetchFleet();
   }, [fetchFleet]);
+
+  useEffect(() => {
+    api.get<Project[]>('/api/projects')
+      .then((res) => setProjects(res || []))
+      .catch(() => {});
+  }, []);
 
   const handleRevoke = async () => {
     if (!window.confirm('Thu hồi vai lead hiện tại?')) {
@@ -128,6 +165,39 @@ export default function Fleet() {
     }
   };
 
+  const handleLeadEligibleToggle = async (agentId: string, nextVal: boolean) => {
+    setActionError(null);
+    try {
+      await api.patch(`/api/admin/agents/${encodeURIComponent(agentId)}`, { lead_eligible: nextVal });
+      await fetchFleet();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Lỗi khi cập nhật quyền trưởng phòng');
+      }
+    }
+  };
+
+  const handleAgentProjectChange = async (agentId: string, projectId: string) => {
+    setActionError(null);
+    try {
+      const body = projectId === '' ? { projects: null } : { projects: [projectId] };
+      await api.patch(`/api/admin/agents/${encodeURIComponent(agentId)}`, body);
+      await fetchFleet();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Lỗi khi gán dự án cho agent');
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -157,17 +227,58 @@ export default function Fleet() {
           action={
             <button
               type="button"
+              onClick={() => setDialogOpen(true)}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
             >
               Thêm máy mới
             </button>
           }
         />
+        <AddMachineDialog
+          open={dialogOpen}
+          onClose={() => {
+            setDialogOpen(false);
+            fetchFleet();
+          }}
+        />
       </div>
     );
   }
 
   const { lead, workers } = data;
+
+  // Group workers by owner: System workers (owner === null) first, then by owner.id
+  const systemWorkers = workers.filter((w) => !w.owner);
+  const partnerWorkers = workers.filter((w) => !!w.owner);
+
+  const groups: OwnerGroup[] = [];
+
+  if (systemWorkers.length > 0) {
+    groups.push({
+      key: 'system',
+      testId: 'owner-group-system',
+      title: 'Hệ thống',
+      workers: systemWorkers,
+    });
+  }
+
+  const partnerMap = new Map<string, { owner: Owner; workers: Worker[] }>();
+  for (const w of partnerWorkers) {
+    const o = w.owner!;
+    if (!partnerMap.has(o.id)) {
+      partnerMap.set(o.id, { owner: o, workers: [] });
+    }
+    partnerMap.get(o.id)!.workers.push(w);
+  }
+
+  for (const [ownerId, val] of partnerMap.entries()) {
+    groups.push({
+      key: ownerId,
+      testId: `owner-group-${ownerId}`,
+      title: val.owner.login,
+      workers: val.workers,
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -178,6 +289,13 @@ export default function Fleet() {
             Giám sát tình trạng runner máy con, điều phối agent và luân chuyển vai Trưởng phòng.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+        >
+          Thêm máy mới
+        </button>
       </div>
 
       {actionError && <ErrorBanner message={actionError} />}
@@ -240,113 +358,185 @@ export default function Fleet() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {workers.map((worker) => (
-          <div
-            key={worker.id}
-            data-testid={`worker-${worker.id}`}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-3">
-                <LedDot status={worker.conn_status} />
-                <span className="font-semibold text-slate-900">{worker.name}</span>
-                <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600 uppercase">
-                  {worker.os}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Link
-                  to={`/fleet/${worker.id}/terminal`}
-                  className="rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 shadow-xs hover:bg-slate-50 hover:text-indigo-700"
+      <div className="space-y-8">
+        {groups.map((group) => (
+          <div key={group.key} data-testid={group.testId} className="space-y-4">
+            <h2 className="text-lg font-semibold text-slate-800">{group.title}</h2>
+            <div className="space-y-4">
+              {group.workers.map((worker) => (
+                <div
+                  key={worker.id}
+                  data-testid={`worker-${worker.id}`}
+                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
-                  Xem log
-                </Link>
-                <span
-                  className={`rounded px-2.5 py-0.5 text-xs font-semibold ${
-                    worker.conn_status === 'ONLINE'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {worker.conn_status}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              {worker.agents.map((agent) => {
-                const isLead = lead.state === 'HELD' && lead.agent_id === agent.id;
-                const canAssign =
-                  worker.conn_status === 'ONLINE' &&
-                  agent.kind === 'CLAUDE' &&
-                  agent.status === 'IDLE' &&
-                  !isLead;
-
-                return (
-                  <div
-                    key={agent.id}
-                    data-testid={`agent-${agent.id}`}
-                    className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/70 p-3.5"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <LedDot status={agent.status} />
-                          <span className="font-medium text-slate-800">{agent.id}</span>
-                          {isLead && (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                              LEAD
-                            </span>
-                          )}
-                        </div>
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                            agent.status === 'IDLE'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : agent.status === 'BUSY'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-purple-100 text-purple-800'
-                          }`}
-                        >
-                          {agent.status}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <LedDot status={worker.conn_status} />
+                      <span className="font-semibold text-slate-900">{worker.name}</span>
+                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase text-slate-600">
+                        {worker.os}
+                      </span>
+                      {worker.version && (
+                        <span className="font-mono text-xs text-slate-500">
+                          {worker.version}
                         </span>
-                      </div>
-
-                      {agent.current_job && (
-                        <div className="mt-2 text-xs text-slate-600">
-                          Tác vụ hiện tại:{' '}
-                          <span className="font-mono font-medium text-slate-900">
-                            {agent.current_job.task_id}
-                          </span>
-                        </div>
                       )}
-
-                      {agent.status === 'COOLDOWN' && agent.cooldown_until && (
-                        <div className="mt-2 text-xs text-purple-700">
-                          Nghỉ đến: {agent.cooldown_until}
-                        </div>
+                      {worker.paused && (
+                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          Tạm dừng
+                        </span>
                       )}
                     </div>
-
-                    {canAssign && (
-                      <div className="mt-3 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleAssign(agent.id)}
-                          className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white shadow-xs hover:bg-indigo-700"
-                        >
-                          Trao vai
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      <Link
+                        to={`/fleet/${worker.id}/terminal`}
+                        className="rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 shadow-xs hover:bg-slate-50 hover:text-indigo-700"
+                      >
+                        Xem log
+                      </Link>
+                      <span
+                        className={`rounded px-2.5 py-0.5 text-xs font-semibold ${
+                          worker.conn_status === 'ONLINE'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {worker.conn_status}
+                      </span>
+                    </div>
                   </div>
-                );
-              })}
+
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {worker.agents.map((agent) => {
+                      const isLead = lead.state === 'HELD' && lead.agent_id === agent.id;
+                      const canAssign =
+                        worker.conn_status === 'ONLINE' &&
+                        agent.kind === 'CLAUDE' &&
+                        agent.status === 'IDLE' &&
+                        !isLead;
+                      const isEligible = agent.lead_eligible !== false;
+                      const currentProjId = agent.projects?.[0] ?? '';
+
+                      return (
+                        <div
+                          key={agent.id}
+                          data-testid={`agent-${agent.id}`}
+                          className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/70 p-3.5 space-y-3"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <LedDot status={agent.status} />
+                                <span className="font-medium text-slate-800">{agent.id}</span>
+                                {isLead && (
+                                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                    LEAD
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                                  agent.status === 'IDLE'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : agent.status === 'BUSY'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-purple-100 text-purple-800'
+                                }`}
+                              >
+                                {agent.status}
+                              </span>
+                            </div>
+
+                            {agent.current_job && (
+                              <div className="mt-2 text-xs text-slate-600 space-y-0.5">
+                                <div>
+                                  Tác vụ hiện tại:{' '}
+                                  <span className="font-mono font-medium text-slate-900">
+                                    {agent.current_job.task_id}
+                                  </span>
+                                  {agent.current_job.task_title && (
+                                    <span className="ml-1 text-slate-700">· {agent.current_job.task_title}</span>
+                                  )}
+                                </div>
+                                {agent.current_job.project && (
+                                  <div className="text-slate-500 font-mono text-[11px]">
+                                    Dự án: {agent.current_job.project}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {agent.status === 'COOLDOWN' && agent.cooldown_until && (
+                              <div className="mt-2 text-xs text-purple-700">
+                                Nghỉ đến: {agent.cooldown_until}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-2 border-t border-slate-200/60 pt-2 text-xs">
+                            {agent.kind === 'CLAUDE' && (
+                              <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  aria-label="Cho làm trưởng phòng"
+                                  checked={isEligible}
+                                  onChange={() => handleLeadEligibleToggle(agent.id, !isEligible)}
+                                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span>Cho làm trưởng phòng</span>
+                              </label>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <label htmlFor={`agent-proj-${agent.id}`} className="text-slate-600">
+                                Dự án:
+                              </label>
+                              <select
+                                id={`agent-proj-${agent.id}`}
+                                aria-label="Dự án được nhận"
+                                value={currentProjId}
+                                onChange={(e) => handleAgentProjectChange(agent.id, e.target.value)}
+                                className="flex-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none"
+                              >
+                                <option value="">Mọi dự án</option>
+                                {projects.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {canAssign && (
+                            <div className="mt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleAssign(agent.id)}
+                                className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white shadow-xs hover:bg-indigo-700"
+                              >
+                                Trao vai
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
       </div>
+
+      <AddMachineDialog
+        open={dialogOpen}
+        onClose={() => {
+          setDialogOpen(false);
+          fetchFleet();
+        }}
+      />
     </div>
   );
 }
