@@ -22,6 +22,7 @@ export default function Office() {
   const [officeState, setOfficeState] = useState<OfficeState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [hoveredInfo, setHoveredInfo] = useState<{
     x: number;
     y: number;
@@ -34,7 +35,7 @@ export default function Office() {
 
   // SSE stream
   useEffect(() => {
-    const es = new EventSource('/api/admin/office/stream');
+    const es = new EventSource('/api/office/stream');
 
     es.onopen = () => {
       setError(null);
@@ -71,7 +72,7 @@ export default function Office() {
 
   const layout = useMemo(() => {
     if (!snapshot) return null;
-    return computeLayout(snapshot.workers);
+    return computeLayout(snapshot.workers, snapshot.users ?? []);
   }, [snapshot]);
 
   // Sync animation positions
@@ -84,7 +85,6 @@ export default function Office() {
         isInitialSnap.current
       );
       isInitialSnap.current = false;
-      // Vẽ ngay một khung: không chờ requestAnimationFrame (bị hoãn khi tab ở nền / vừa mở trang).
       if (canvasRef.current) {
         renderOffice(canvasRef.current, layout, officeState, animRef.current, Date.now());
       }
@@ -110,7 +110,7 @@ export default function Office() {
       if (!isPaused && officeState && layout) {
         const moving = stepAnim(anim, dt);
         const working = Object.values(officeState.chars).some(
-          (c) => c.task && c.place === 'desk'
+          (c) => c.task && (c.place === 'desk' || c.place === 'lead-seat')
         );
         hasActivity = moving || working;
       }
@@ -135,7 +135,6 @@ export default function Office() {
     };
   }, [isPaused, officeState, layout]);
 
-  // Handle canvas mouse move for tooltips
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !layout || !officeState) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -144,7 +143,6 @@ export default function Office() {
     const cx = (e.clientX - rect.left) * scaleX;
     const cy = (e.clientY - rect.top) * scaleY;
 
-    // Check characters
     for (const [id, c] of Object.entries(officeState.chars)) {
       const a = animRef.current.chars[id];
       if (a && Math.hypot(a.x - cx, a.y - cy) < 18) {
@@ -168,7 +166,7 @@ export default function Office() {
 
   if (!snapshot) {
     return (
-      <section className="space-y-4">
+      <section className="space-y-4" aria-busy="true">
         <h1 className="text-xl font-semibold">Văn phòng ảo</h1>
         {error && <ErrorBanner message={error} />}
         <Loading />
@@ -185,10 +183,10 @@ export default function Office() {
           title="Chưa có máy nào kết nối"
           action={
             <Link
-              to="/fleet"
+              to="/my/machines"
               className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
             >
-              Đăng ký máy
+              Thêm máy
             </Link>
           }
         />
@@ -202,6 +200,13 @@ export default function Office() {
   const breakAgents = officeState
     ? Object.values(officeState.chars).filter((c) => c.place === 'break').length
     : 0;
+  const needsAuthCount = officeState
+    ? Object.values(officeState.chars).filter((c) => c.place === 'auth').length
+    : 0;
+  const usersList = officeState ? Object.values(officeState.users) : [];
+  const totalUsers = usersList.length;
+  const onlineUsers = usersList.filter((u) => u.online).length;
+
   const leadDisplay = officeState?.lead
     ? officeState.lead
     : officeState?.vacantNote
@@ -216,22 +221,163 @@ export default function Office() {
 
       {error && <ErrorBanner message={error} />}
 
-      {/* Canvas container with pixelated rendering */}
-      <div className="relative inline-block overflow-hidden rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-lg">
+      {/* Canvas container with overlay */}
+      <div className="relative inline-block overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
         <canvas
           ref={canvasRef}
           data-testid="office-canvas"
-          width={layout?.width ?? 384}
-          height={layout?.height ?? 272}
+          width={layout?.width ?? 480}
+          height={layout?.height ?? 260}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           className="block max-w-full rounded"
           style={{
             imageRendering: 'pixelated',
-            width: (layout?.width ?? 384) * 2,
-            height: (layout?.height ?? 272) * 2,
+            width: (layout?.width ?? 480) * 2,
+            height: (layout?.height ?? 260) * 2,
           }}
         />
+
+        {/* DOM overlay layer */}
+        {layout && officeState && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {/* INOVA Logo on back wall */}
+            <div
+              style={{
+                position: 'absolute',
+                left: `${(layout.zones.logo.x / layout.width) * 100}%`,
+                top: `${(layout.zones.logo.y / layout.height) * 100}%`,
+                width: `${(layout.zones.logo.w / layout.width) * 100}%`,
+                height: `${(layout.zones.logo.h / layout.height) * 100}%`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {logoError ? (
+                <span
+                  data-testid="logo-fallback"
+                  className="font-bold tracking-wider"
+                  style={{ color: '#c8102e', fontSize: '18px' }}
+                >
+                  INOVA
+                </span>
+              ) : (
+                <img
+                  alt="INOVA"
+                  src="/brand/inova-logo.png"
+                  onError={() => setLogoError(true)}
+                  style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                />
+              )}
+            </div>
+
+            {/* INOVA Icon at command door */}
+            <img
+              data-testid="inova-icon-door"
+              src="/brand/inova-icon.png"
+              alt=""
+              style={{
+                position: 'absolute',
+                left: `${(layout.zones.commandDoor.x / layout.width) * 100}%`,
+                top: `${(layout.zones.commandDoor.y / layout.height) * 100}%`,
+                width: '16px',
+                height: '16px',
+                objectFit: 'contain',
+              }}
+            />
+
+            {/* INOVA Icon at lobby rug */}
+            <img
+              data-testid="inova-icon-rug"
+              src="/brand/inova-icon.png"
+              alt=""
+              style={{
+                position: 'absolute',
+                left: `${((layout.zones.lobbyRug.x + Math.floor(layout.zones.lobbyRug.w / 2) - 8) / layout.width) * 100}%`,
+                top: `${((layout.zones.lobbyRug.y + Math.floor(layout.zones.lobbyRug.h / 2) - 8) / layout.height) * 100}%`,
+                width: '16px',
+                height: '16px',
+                objectFit: 'contain',
+              }}
+            />
+
+            {/* Seats */}
+            {layout.seats.map((seat) => (
+              <div
+                key={seat.index}
+                data-testid={`seat-${seat.index}`}
+                data-agent={seat.agentId ?? undefined}
+                data-empty={seat.agentId ? undefined : 'true'}
+                style={{
+                  position: 'absolute',
+                  left: `${(seat.x / layout.width) * 100}%`,
+                  top: `${(seat.y / layout.height) * 100}%`,
+                  width: `${(seat.w / layout.width) * 100}%`,
+                  height: `${(seat.h / layout.height) * 100}%`,
+                }}
+              />
+            ))}
+
+            {/* Machine labels */}
+            {layout.machineLabels.map((ml) => (
+              <div
+                key={ml.workerId}
+                data-testid={`machine-label-${ml.workerId}`}
+                style={{
+                  position: 'absolute',
+                  left: `${(ml.x / layout.width) * 100}%`,
+                  top: `${(ml.y / layout.height) * 100}%`,
+                  fontSize: '9px',
+                  color: '#94a3b8',
+                }}
+              >
+                {ml.workerId}
+                {officeState.ghNeeds.has(ml.workerId) && ' 🔑'}
+              </div>
+            ))}
+
+            {/* User desks */}
+            {layout.userDesks.map((ud) => {
+              const userState = officeState.users[ud.login];
+              const isOnline = userState ? userState.online : ud.online;
+              return (
+                <div
+                  key={ud.login}
+                  data-testid={`user-${ud.login}`}
+                  data-online={String(isOnline)}
+                  style={{
+                    position: 'absolute',
+                    left: `${(ud.x / layout.width) * 100}%`,
+                    top: `${(ud.y / layout.height) * 100}%`,
+                    fontSize: '10px',
+                    color: isOnline ? '#e2e8f0' : '#64748b',
+                  }}
+                >
+                  <span>{ud.login}</span> {isOnline ? '🟢' : '░░'}
+                </div>
+              );
+            })}
+
+            {/* Characters for agents */}
+            {Object.entries(officeState.chars).map(([agentId, char]) => (
+              <div
+                key={agentId}
+                data-testid={`char-${agentId}`}
+                data-place={char.place}
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  pointerEvents: 'none',
+                }}
+              >
+                <span>{agentId}</span>
+                <span>{char.place}</span>
+                {char.place === 'auth' && ' 🔑'}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Floating tooltip */}
         {hoveredInfo && (
@@ -244,39 +390,33 @@ export default function Office() {
         )}
       </div>
 
-      {/* Accessible list of agents */}
-      {officeState && (
-        <div className="sr-only">
-          {Object.entries(officeState.chars).map(([agentId, char]) => (
-            <div
-              key={agentId}
-              data-testid={`char-${agentId}`}
-              data-place={char.place}
-            >
-              <span>{agentId}</span>
-              <span>{char.place}</span>
-              {char.task && <span>{char.task}</span>}
-              {char.note && <span>{char.note}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Status bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">
+      <div
+        data-testid="office-status"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+      >
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <span className="text-slate-500">Trưởng phòng: </span>
+            <span className="text-slate-500">Lead: </span>
             <span className="font-medium text-slate-900">{leadDisplay}</span>
           </div>
           <div>
-            <span className="text-slate-500">Đang chạy: </span>
+            <span className="text-slate-500">Đang chạy </span>
             <span className="font-semibold text-emerald-600">{busyJobs}</span>
-            <span className="text-slate-500"> job</span>
           </div>
           <div>
-            <span className="text-slate-500">Phòng nghỉ: </span>
+            <span className="text-slate-500">Nghỉ </span>
             <span className="font-semibold text-amber-600">{breakAgents}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Cần đăng nhập </span>
+            <span className="font-semibold text-rose-600">{needsAuthCount}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Online </span>
+            <span className="font-semibold text-blue-600">
+              {onlineUsers}/{totalUsers}
+            </span>
           </div>
         </div>
 
