@@ -1,0 +1,4 @@
+5fe75ab3c478e4fec7154353e84ac9de95e7af90bc6864f884b0b7a0fba7e515  handoff/tasks/TASK-046-tokens-mcp/verify.sh
+da3c9f0c48f8352f377967b72145246baebed0ee653b483e033d62a399d78490  internal/tokens/tokens_test.go
+4583e82d733d81d72279348b67e293167c58b3f47d98bb42ba6a7b62fa16d85f  internal/mcp/mcp_test.go
+cbd4abdeb3f771d72351d64d204102370405db01fd5f14469e97bf87da32890c  web/src/pages/profile.test.tsx
