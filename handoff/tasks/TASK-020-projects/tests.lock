@@ -1,0 +1,4 @@
+002bc173265d86dbb9a2b185604888bb5d3577295378d0a951efc71dd475f8d4  handoff/tasks/TASK-020-projects/verify.sh
+b5f9fd52af338ab8fa702b25d70240c08f8d380e801c1e90eacec2a32cceefbe  internal/projects/projects_test.go
+037c0fa8db68e32f506fc242e81de40c6f53ef5ae97f090b02457cfce93af252  internal/auth/multi_test.go
+9c79ad85409af609336ed531584bfd955bd7b28ba95ba9445df282116025367f  internal/auth/auth_test.go
