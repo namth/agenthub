@@ -1,2 +1,2 @@
 68e8857761c5754ff3b9657d76d1da55b412abfeb70f27cefb2419aa1252eced  handoff/tasks/TASK-042-runner-auth-probe/verify.sh
-9b3fdc2ff3773a0cdf8a0ecc988b986265bb284561f47bc747b7d86a76b80238  internal/runner/probe_test.go
+db1a2070220cb4ed2b0de6b6d97bbfd6237463e3ffaf24183b693d05af08066a  internal/runner/probe_test.go

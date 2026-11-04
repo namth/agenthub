@@ -157,7 +157,10 @@ func TestRecheckRunsProbe(t *testing.T) {
 		"claude-auth":  {loggedIn(true), loggedIn(true)},
 		"claude-probe": {{output: oauthErr, exit: 1}, {output: "OK\n"}},
 	}}
-	r := startAuth(t, ex, nil, func(c *runner.Config) { c.AuthProbes = map[string][]string{"CLAUDE": {"claude-probe", "-p", "OK?"}}; c.ProbeEvery = time.Hour })
+	r := startAuth(t, ex, nil, func(c *runner.Config) {
+		c.AuthProbes = map[string][]string{"CLAUDE": {"claude-probe", "-p", "OK?"}}
+		c.ProbeEvery = time.Hour
+	})
 	r.gw.handshake("mac")
 	r.gw.send(map[string]any{"event": "AUTH_RECHECK", "agent_id": "mac/claude"})
 	r.gw.expect("AGENT_AUTH", authFor("mac/claude", "OK"))

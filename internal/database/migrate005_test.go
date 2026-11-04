@@ -79,12 +79,12 @@ func TestMigration005KeepsData(t *testing.T) { // TC-74
 		t.Fatal("chưa ghi schema_migrations phiên bản 5")
 	}
 	for q, want := range map[string]int{
-		`SELECT COUNT(*) FROM tasks`:        3,
-		`SELECT COUNT(*) FROM jobs`:         2,
-		`SELECT COUNT(*) FROM assignments`:  1,
-		`SELECT COUNT(*) FROM task_logs`:    1,
-		`SELECT COUNT(*) FROM lead_journal`: 1,
-		`SELECT COUNT(*) FROM tasks WHERE id='t2' AND parent_id='t1'`:                                                                       1,
+		`SELECT COUNT(*) FROM tasks`:                                  3,
+		`SELECT COUNT(*) FROM jobs`:                                   2,
+		`SELECT COUNT(*) FROM assignments`:                            1,
+		`SELECT COUNT(*) FROM task_logs`:                              1,
+		`SELECT COUNT(*) FROM lead_journal`:                           1,
+		`SELECT COUNT(*) FROM tasks WHERE id='t2' AND parent_id='t1'`: 1,
 		`SELECT COUNT(*) FROM tasks WHERE id='t1' AND status='READY' AND branch_name='feat/t1' AND github_issue_id=101 AND assigned_worker_id='w1'`: 1,
 	} {
 		if n := count(t, db, q); n != want {
@@ -177,8 +177,8 @@ func TestMigration005NewSchema(t *testing.T) {
 		}
 	}
 	bad := []string{
-		`INSERT INTO task_clarifications (id, task_id, round, questions) VALUES ('c2', 't1', 1, '[]')`,                     // trùng (task, round)
-		`INSERT INTO task_clarifications (id, task_id, round, questions, status) VALUES ('c3', 't1', 2, '[]', 'LA')`,       // status lạ
+		`INSERT INTO task_clarifications (id, task_id, round, questions) VALUES ('c2', 't1', 1, '[]')`,                      // trùng (task, round)
+		`INSERT INTO task_clarifications (id, task_id, round, questions, status) VALUES ('c3', 't1', 2, '[]', 'LA')`,        // status lạ
 		`INSERT INTO task_clarifications (id, task_id, round, questions, answered_via) VALUES ('c4', 't1', 3, '[]', 'FAX')`, // kênh lạ
 		`INSERT INTO smoke_runs (id, project_id, status) VALUES ('s1', 'p1', 'LA')`,
 		`INSERT INTO lead_proposals (id, task_id, kind, reason, proposed_by, epoch) VALUES ('l1', 't1', 'DELETE', 'x', 'a', 1)`,
