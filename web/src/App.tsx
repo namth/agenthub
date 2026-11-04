@@ -23,17 +23,20 @@ const PAGES: Record<string, React.ComponentType> = {
 
 export default function App() {
   const auth = useAuth();
-  const [officeEnabled, setOfficeEnabled] = useState(false);
+  // null = Admin đang chờ đọc cài đặt: chưa dựng route để không chuyển hướng nhầm khỏi /office.
+  const [officeSetting, setOfficeEnabled] = useState<boolean | null>(null);
+  const isAdmin = auth.status === 'ready' && auth.user.role === 'ADMIN';
+  const officeEnabled = officeSetting === true;
 
   useEffect(() => {
-    if (auth.status === 'ready' && auth.user.role === 'ADMIN') {
+    if (isAdmin) {
       api.get<{ office_enabled: boolean }>('/api/admin/settings')
         .then((data) => setOfficeEnabled(Boolean(data?.office_enabled)))
-        .catch(() => {});
+        .catch(() => setOfficeEnabled(false));
     }
-  }, [auth.status, auth.status === 'ready' ? auth.user.role : null]);
+  }, [isAdmin]);
 
-  if (auth.status === 'loading') return <div className="p-6"><Loading /></div>;
+  if (auth.status === 'loading' || (isAdmin && officeSetting === null)) return <div className="p-6"><Loading /></div>;
   if (auth.status === 'error')
     return <div className="p-6"><ErrorBanner message={`Không tải được phiên đăng nhập: ${auth.message}`} onRetry={() => location.reload()} /></div>;
   if (auth.status === 'anonymous')

@@ -11,3 +11,5 @@ web/node_modules/
 /agenthub
 .DS_Store
 bin/
+.demo-build/
+.claude/launch.json
