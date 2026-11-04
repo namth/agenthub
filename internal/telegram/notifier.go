@@ -228,3 +228,21 @@ func (n *Notifier) NotifyNewTask(taskID string, issue int, title, requester, des
 		buttons: buttons,
 	})
 }
+
+// NotifyQAPassed gửi thông báo task đã đạt QA kèm nút Merge.
+func (n *Notifier) NotifyQAPassed(taskID, title, prURL string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("🎉 QA đạt: %s\nPR: %s", title, prURL)
+	buttons := [][]Button{
+		{
+			{Text: "🔀 Merge", CallbackData: "task_merge:" + taskID},
+		},
+	}
+	n.enqueue(notifyItem{
+		chatID:  n.adminChatID,
+		text:    text,
+		buttons: buttons,
+	})
+}
