@@ -1,0 +1,19 @@
+{
+  "id": "TASK-038",
+  "title": "Pipeline NEED_INFO: WAITING_USER, 3 vòng, nhắc 24h/72h, câu hỏi lên GitHub và Telegram",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T22:05:01",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-038-pipeline-need-info/verify.sh",
+    "internal/pipeline/clarify_test.go",
+    "internal/telegram/clarify_notify_test.go",
+    "internal/tasks/comment_test.go"
+  ]
+}

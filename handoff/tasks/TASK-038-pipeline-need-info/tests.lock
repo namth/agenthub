@@ -1,0 +1,4 @@
+574b22b328e6b9a451342161a17b9fdbf417dcb4a4265cb6a1eb5147114718bd  handoff/tasks/TASK-038-pipeline-need-info/verify.sh
+ff343efb788a5847f7e4373c2969d7968d7b4c130a281683c2e64d1f4bcb0f50  internal/pipeline/clarify_test.go
+4cacd1edfcbff74f2a81cd45ed8a694152cf48c504dae8046a5512ba914c462c  internal/telegram/clarify_notify_test.go
+fccd34830d9c21d5058fc976c31dd50f05c5dff4a6c5657c99ee1181444aedd1  internal/tasks/comment_test.go
