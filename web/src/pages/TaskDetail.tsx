@@ -204,7 +204,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
               type="button"
               onClick={handleApprove}
               disabled={acting}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-green-700 disabled:opacity-50"
+              className="min-h-11 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-green-700 disabled:opacity-50"
             >
               Duyệt
             </button>
@@ -212,7 +212,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
               type="button"
               onClick={handleReject}
               disabled={acting}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
+              className="min-h-11 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
             >
               Từ chối
             </button>
@@ -224,7 +224,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
             type="button"
             onClick={handleMerge}
             disabled={acting}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800 disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800 disabled:opacity-50"
           >
             Merge vào main
           </button>

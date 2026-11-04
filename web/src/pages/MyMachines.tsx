@@ -198,7 +198,7 @@ export default function MyMachines() {
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
+            className="min-h-11 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
           >
             Thêm máy mới
           </button>
@@ -210,7 +210,7 @@ export default function MyMachines() {
             <button
               type="button"
               onClick={() => setDialogOpen(true)}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
+              className="min-h-11 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
             >
               Thêm máy mới
             </button>
@@ -239,7 +239,7 @@ export default function MyMachines() {
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
+          className="min-h-11 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800"
         >
           Thêm máy mới
         </button>
@@ -289,14 +289,14 @@ export default function MyMachines() {
                 <button
                   type="button"
                   onClick={() => handleTogglePause(m)}
-                  className="rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="min-h-11 rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
                   {m.paused ? 'Tiếp tục' : 'Tạm dừng'}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDelete(m)}
-                  className="rounded border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300"
+                  className="min-h-11 rounded border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300"
                 >
                   Gỡ
                 </button>
