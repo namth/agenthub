@@ -211,16 +211,16 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 		fleetLead.VacantSince = formatRFC3339(vacantSinceVal)
 	}
 
-	// ETA = MIN(cooldown_until) của agent CLAUDE đang COOLDOWN
+	// ETA = MIN(cooldown_until) của agent lead_eligible=1 đang COOLDOWN (mọi loại)
 	var minCdVal any
 	_ = db.QueryRow(
-		"SELECT MIN(cooldown_until) FROM agents WHERE kind = 'CLAUDE' AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+		"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
 	).Scan(&minCdVal)
 	fleetLead.ETA = formatRFC3339(minCdVal)
 
-	// Waiting jobs = số job required_agent='CLAUDE' đang QUEUED
+	// Waiting jobs = số job lead_only hoặc required_agent='CLAUDE' đang QUEUED
 	var waitingJobs int
-	_ = db.QueryRow("SELECT COUNT(*) FROM jobs WHERE required_agent = 'CLAUDE' AND status = 'QUEUED'").Scan(&waitingJobs)
+	_ = db.QueryRow("SELECT COUNT(*) FROM jobs WHERE (lead_only = 1 OR required_agent = 'CLAUDE') AND status = 'QUEUED'").Scan(&waitingJobs)
 	fleetLead.WaitingJobs = waitingJobs
 
 	// Workers
@@ -473,8 +473,8 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 		return
 	}
 
-	var kind string
-	err = db.QueryRow("SELECT kind FROM agents WHERE id = ?", agentID).Scan(&kind)
+	var existsID string
+	err = db.QueryRow("SELECT id FROM agents WHERE id = ?", agentID).Scan(&existsID)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy agent")
 		return
@@ -501,10 +501,6 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 	var updateLeadPriority bool
 	var newLeadPriority *int
 	if raw, ok := rawMap["lead_priority"]; ok {
-		if kind != "CLAUDE" {
-			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "lead_priority chỉ áp dụng cho agent CLAUDE")
-			return
-		}
 		updateLeadPriority = true
 		if string(raw) == "null" {
 			newLeadPriority = nil
