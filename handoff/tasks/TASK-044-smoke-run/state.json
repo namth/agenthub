@@ -1,7 +1,7 @@
 {
   "id": "TASK-044",
   "title": "Dự án sandbox: Chạy thử dây chuyền + giao diện SCR-09 (allowlist, sandbox)",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "c3396cde-b7ac-457f-a512-9dc4aa330dd6",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T22:32:11",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:33:21",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
