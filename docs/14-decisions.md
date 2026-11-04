@@ -84,7 +84,7 @@
 
 ## DEC-11: Ánh xạ 8 trạng thái task sang 5 cột Kanban
 - **Ngày:** 2026-11-04 · **Trạng thái:** CHỐT
-- **Quyết định:** `backlog` = PENDING_APPROVAL · `planning` = PLANNING, READY · `in_progress` = IN_PROGRESS · `review` = WAITING_QA, QA_PASSED · `done` = DONE. Task `REJECTED` không hiện trên Kanban (xem ở chi tiết/lọc).
+- **Quyết định:** `backlog` = PENDING_APPROVAL · `planning` = PLANNING, READY, WAITING_USER *(thêm theo DEC-33, nhãn "Cần làm rõ")* · `in_progress` = IN_PROGRESS · `review` = WAITING_QA, QA_PASSED · `done` = DONE. Task `REJECTED` không hiện trên Kanban (xem ở chi tiết/lọc).
 - **Kèm theo:** Partner chỉ thấy task gốc (`parent_id IS NULL`), không có `branch_name`, `assigned_worker_id`. Tra quyền collaborator bằng token server, OAuth người dùng chỉ xin `read:user`.
 
 ## DEC-12: Agent trả kết quả có cấu trúc qua file `result.json`; server có bộ pipeline
@@ -187,6 +187,58 @@
 - **Bối cảnh:** `docs/03` cũ ghi SCR-07 "cấu hình Telegram Bot Token, Chat ID" nhưng code chỉ đọc `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET` từ môi trường (`cmd/server/main.go`).
 - **Quyết định:** Giữ nguyên `.env`; SCR-07 chỉ hiện dòng chỉ đọc "Telegram: đang bật / tắt (cấu hình trong `.env`)" từ `GET /api/admin/settings.telegram_enabled`. Sửa `docs/03` cho khớp code.
 - **Phương án loại:** Chat ID + công tắc loại tin trên SCR-07; nhập cả token trên web (phải mã hoá secret trong DB).
+
+## DEC-31: Vòng lặp phỏng vấn làm rõ yêu cầu (FEAT-07) & Kỹ năng dự án dùng chung (FEAT-08)
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-07, FEAT-08 · **Trạng thái:** CHỐT
+- **Quyết định:**
+  - **FEAT-07:** Trưởng phòng khi nhận job `SPEC` có thể trả về `{"status":"NEED_INFO","questions":[...]}` thay vì chỉ sinh `subtasks`. Task chuyển sang trạng thái `WAITING_USER` (đóng băng timeout/attempts).
+  - Tương tác đa kênh đồng bộ: Tab Q&A trên Web SCR-04 + GitHub Issue Comments + Telegram Bot inline buttons. Bất kỳ câu trả lời nào gửi về đều nạp vào prompt của `SPEC` để Trưởng phòng hoàn thiện và chốt việc.
+  - Bổ sung bảng `task_clarifications` (`id`, `task_id`, `round`, `questions`, `answers`, `status`, `answered_by`).
+  - ~~**FEAT-08:** Đặt toàn bộ kỹ năng chuẩn (`grill-master`, `grill-feature`) trong `.agents/skills/` của repository (kèm symlink `.claude/skills/`). Prompt của `SPEC` trong Server Go bắt buộc dẫn hướng Trưởng phòng đọc và tuân thủ `.agents/skills/grill-feature/SKILL.md`.~~ → thay bởi DEC-32 (job SPEC chạy trong repo dự án đích nên skill phải đi theo runner).
+
+## DEC-32: Kỹ năng trưởng phòng nhúng trong binary runner
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-08 · **Trạng thái:** CHỐT · **Thay phần FEAT-08 của DEC-31**
+- **Bối cảnh:** Job SPEC chạy trong worktree của repo dự án đích (DEC-15); skill đặt trong repo AgentHub không có ở đó. `grill-feature` là skill tương tác (AskUserQuestion) và đòi bộ `docs/`, không chạy được ở chế độ `-p`.
+- **Quyết định:** Skill không tương tác `agenthub-spec` (phỏng vấn → `NEED_INFO`) nhúng bằng `go:embed` (`internal/skills`), runner chép vào `<worktree>/.agenthub/skills/` và `.git/info/exclude`; dự án có `.agents/skills/agenthub-spec/` riêng thì ưu tiên. Cập nhật theo phiên bản server (DEC-19).
+- **Phương án loại:** mỗi dự án tự mang skill.
+
+## DEC-33: Ai trả lời câu hỏi làm rõ; WAITING_USER ở cột Planning
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-07 · **Trạng thái:** CHỐT · **Sửa DEC-11, sửa BR-52**
+- **Quyết định:** Người trả lời = owner, ADMIN dự án, người tạo task; trả lời trước thì chốt vòng. Kênh: web cho mọi người, comment GitHub `/answer`, Telegram chỉ owner. Job SPEC sau khi trả lời giao cho agent Claude bất kỳ (không bắt buộc lead). Kanban: `WAITING_USER` ở cột Planning, nhãn "Cần làm rõ (n câu)"; nhắc 24h/72h, Admin có "Cho trưởng phòng tự quyết".
+- **Phương án loại:** chỉ Admin trả lời; cột Kanban thứ 6.
+
+## DEC-34: Quyền CLI không tương tác = allowlist theo dự án
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 · **Trạng thái:** CHỐT
+- **Quyết định:** Mặc định hệ thống (`git`, `gh pr create/view`, đọc file) ∪ lệnh build/test riêng dự án do owner khai trên SCR-09; gửi trong `ASSIGN_TASK.payload.allowed_commands`. Claude: `--permission-mode acceptEdits --allowedTools …`; agy: allow-rule tạm theo assignment. Không bao giờ dùng chế độ bỏ qua quyền.
+- **Phương án loại:** allowlist chung cố định; chạy trong container.
+
+## DEC-35: Kiểm đăng nhập bằng lời gọi thật
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 (sửa FEAT-06) · **Trạng thái:** CHỐT · Mở rộng DEC-23
+- **Bối cảnh:** `claude auth status` báo `loggedIn: true` trong khi `claude -p` lỗi "OAuth session expired and could not be refreshed" (iMac-8GB, 2026-11-04).
+- **Quyết định:** Thêm probe gọi prompt cực ngắn lúc bắt tay và 6 giờ/lần khi rảnh; thêm mẫu lỗi OAuth vào `auth_patterns`.
+
+## DEC-36: Dự án sandbox + nút Chạy thử dây chuyền
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 · **Trạng thái:** CHỐT
+- **Quyết định:** Repo `namth/agenthub-sandbox`, cờ `projects.is_sandbox`; owner bấm Chạy thử trên SCR-09 → yêu cầu mẫu tự duyệt, theo dõi SPEC → CODE → PR → QA, đóng PR/issue sau khi xong, lưu `smoke_runs`.
+
+## DEC-37: Máy partner chỉ nhận việc dự án chủ máy là thành viên
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 · **Trạng thái:** CHỐT · Sửa DEC-15 ("NULL = mọi dự án" chỉ còn đúng với máy owner/hệ thống)
+- **Bối cảnh:** máy partner mới nối không có `agent_projects` nên nhận việc mọi dự án, kể cả repo partner không được xem.
+- **Quyết định:** Dispatcher lọc cứng theo `project_members` của chủ máy; mất tư cách thành viên → thu hồi assignment đang chạy (không tăng attempt).
+
+## DEC-38: Không cấp secret cho máy partner; test cần secret chạy ở CI
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 · **Trạng thái:** CHỐT
+- **Quyết định:** Runner không bao giờ nhận secret. Dự án bật `needs_ci_for_integration` → prompt dặn agent dựa vào CI gate (GitHub Actions giữ secret).
+- **Phương án loại:** server mã hoá và cấp secret theo dự án.
+
+## DEC-39: Telegram và MCP chỉ cho owner ở đợt này
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-10 · **Trạng thái:** CHỐT
+- **Quyết định:** Bot chỉ nhận lệnh từ `TELEGRAM_ADMIN_CHAT_ID` (`/new`, `/tasks`, `/status`, Duyệt, Merge, trả lời làm rõ, xác nhận đề xuất huỷ). MCP `/mcp` (Streamable HTTP) với token cá nhân chỉ owner tạo được (SCR-12). Partner chỉ dùng web; mở rộng partner để sau.
+- **Phương án loại:** liên kết Telegram từng người ngay đợt này; CLI `agenthub task …`.
+
+## DEC-40: Web dùng được trên điện thoại; REPLAN/UNBLOCK có hành động
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-10 · **Trạng thái:** CHỐT · Sửa DEC-12 (REPLAN/UNBLOCK có schema kết quả)
+- **Quyết định:** Màn chính dùng được ở 375px. `result.json` của REPLAN/UNBLOCK: `retry` | `replan` | `ask_user` | `cancel` (cancel chờ Admin xác nhận qua `lead_proposals`).
 
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.

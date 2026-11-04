@@ -124,6 +124,33 @@
 | TASK-017 | TASK-07 (SCR-06) | accepted |
 | TASK-018 | TASK-09 (Chốt chặn CI, Merge → DONE) | accepted |
 | TASK-030 → TASK-035 | FEAT-06 + FEAT-02 bản 2 (030/031/032/033 máy chính, 034/035 macbook) | accepted |
+| TASK-036 → TASK-048 | FEAT-07 → FEAT-10 (phòng IT phân tán vận hành thật) | planned |
+
+---
+
+### Milestone 6: Phòng IT phân tán vận hành thật (FEAT-07 → FEAT-10, đặc tả 2026-11-04)
+DoD chi tiết ở §9 của [clarification-and-shared-skills.md](features/clarification-and-shared-skills.md), [ops-readiness.md](features/ops-readiness.md), [remote-command.md](features/remote-command.md).
+
+**Ưu tiên 1 — chạy thật & an toàn (FEAT-09):**
+- [ ] **TASK-041: Allowlist lệnh theo dự án, runner dựng cờ claude/agy (không bỏ qua quyền)** — TC-83, TC-84, TC-88
+- [ ] **TASK-042: Runner kiểm đăng nhập bằng lời gọi thật + mẫu lỗi OAuth** — TC-85
+- [ ] **TASK-043: Máy partner chỉ nhận việc dự án mình là thành viên** — TC-86, TC-87
+- [ ] **TASK-044: Dự án sandbox + Chạy thử dây chuyền** — TC-89
+
+**Ưu tiên 2 — làm rõ yêu cầu & kỹ năng (FEAT-07/08):**
+- [ ] **TASK-036: Migration `005_ops_remote.sql` (dựng lại `tasks` + `WAITING_USER`, `task_clarifications`, cột FEAT-09, `personal_tokens`, `lead_proposals`, `smoke_runs`)** — TC-74 · *làm đầu tiên, các task khác phụ thuộc*
+- [ ] **TASK-037: Skill `agenthub-spec` nhúng binary, runner chép vào worktree, prompt SPEC** — TC-81
+- [ ] **TASK-038: Pipeline `NEED_INFO`/`WAITING_USER`, nhắc 24h/72h, 3 vòng, GitHub + Telegram owner** — TC-75, TC-76, TC-80
+- [ ] **TASK-039: API làm rõ + `/answer` trên GitHub + callback Telegram** — TC-77 → TC-79
+- [ ] **TASK-040: Web SCR-04 tab Làm rõ, nhãn Kanban** — TC-82
+
+**Ưu tiên 3 — điều hành mọi nơi (FEAT-10):**
+- [ ] **TASK-045: Lệnh Telegram cho owner (`/new`, `/tasks`, `/status`, Merge, đề xuất huỷ)** — TC-90, TC-91
+- [ ] **TASK-046: Token cá nhân + MCP `/mcp` + SCR-12 Hồ sơ** — TC-92, TC-93
+- [ ] **TASK-047: Web responsive 375px** — TC-96
+- [ ] **TASK-048: REPLAN/UNBLOCK có hành động + `lead_proposals`** — TC-94, TC-95
+
+**Thứ tự & phạm vi file:** TASK-036 → (041 `internal/projects`+`internal/runner` exec ∥ 043 `internal/dispatcher` ∥ 037 `internal/skills`+`internal/runner` worktree) — 041 và 037/042 cùng `internal/runner` nên chạy nối tiếp nhau → 042 → 044 → 038 → 039 ∥ 040 → 045 ∥ 046 ∥ 047 → 048.
 
 **Trưởng phòng tự làm (ngoài handoff):** nối dây `cmd/server/main.go`; sự kiện `JOB_ASSIGNED/SUBMITTED`; giết cả nhóm tiến trình khi huỷ CLI; `Reconcile` bù job còn thiếu (30 giây/lần); nút Merge trên SCR-04; sửa route `/office`; test trọn dây chuyền `internal/e2e`.
 

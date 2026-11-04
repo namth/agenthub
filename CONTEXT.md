@@ -20,6 +20,7 @@ AgentHub là nền tảng điều phối đa AI Agent phân tán (Distributed Mu
 - **Trưởng phòng trực & chuyển giao (FEAT-01):** Server Go là bộ điều phối duy nhất; việc trí tuệ là job; một agent Claude giữ `lead_lease` (epoch, TTL 90s). Hết limit → `COOLDOWN`, job giao lại cho agent rảnh làm tiếp từ nhánh; fencing bằng `assignment_id`/`epoch`.
 - **Văn phòng ảo (FEAT-02, bản 2):** SCR-08 tuỳ chọn, pixel-art chỉ quan sát, vẽ từ sự kiện server qua SSE; khu làm việc ≥ 8 bàn hai cụm, bàn Trưởng phòng, khu chỉ huy mỗi tài khoản một bàn, logo INOVA; owner + partner xem.
 - **Trạng thái đăng nhập agent (FEAT-06):** `agents.auth_status OK|NEEDS_AUTH|UNKNOWN`, `workers.gh_auth`; agent `NEEDS_AUTH` không nhận việc/không làm lead. Lead có thể là agent bất kỳ có `lead_eligible` (DEC-29). Telegram cấu hình trong `.env` (DEC-30).
+- **Phòng IT phân tán (FEAT-07 → 10, SPEC):** SPEC được hỏi lại người dùng (`NEED_INFO` → `WAITING_USER`); skill `agenthub-spec` nhúng trong runner; CLI chạy với allowlist lệnh theo dự án, không bao giờ bỏ qua quyền; máy partner chỉ nhận việc dự án mình là thành viên; không cấp secret cho runner; owner điều hành qua web (cả điện thoại), Telegram và MCP `/mcp` (token cá nhân).
 
 ## 3. CẤU TRÚC THƯ MỤC CỐT LÕI
 ```text
@@ -73,3 +74,6 @@ agenthub/
 | FEAT-04 | Đa dự án song song | [features/multi-project.md](docs/features/multi-project.md) |
 | FEAT-05 | Thêm máy bằng một lệnh, máy của partner, trang Đóng góp | [features/join-machine.md](docs/features/join-machine.md) |
 | FEAT-06 | Trạng thái đăng nhập agent & trưởng phòng mọi loại agent | [features/agent-auth.md](docs/features/agent-auth.md) |
+| FEAT-07 & 08 | Phỏng vấn làm rõ yêu cầu & kỹ năng trưởng phòng nhúng runner | [features/clarification-and-shared-skills.md](docs/features/clarification-and-shared-skills.md) |
+| FEAT-09 | Vận hành thật & an toàn đa partner | [features/ops-readiness.md](docs/features/ops-readiness.md) |
+| FEAT-10 | Điều hành từ mọi nơi (Telegram, MCP, điện thoại) & REPLAN có hành động | [features/remote-command.md](docs/features/remote-command.md) |

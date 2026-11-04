@@ -119,3 +119,13 @@ Chi tiết ở [features/agent-auth.md](features/agent-auth.md) mục 3. Tóm t�
 2. `NEEDS_AUTH` → agent không nhận việc, nhãn "Cần đăng nhập" trên SCR-05/SCR-11, 🔑 trong văn phòng, Telegram báo Admin.
 3. Chủ máy chạy lệnh đăng nhập trên máy đó → bấm "Đã đăng nhập, kiểm lại" → runner kiểm ngay → `OK`, Telegram báo đã khôi phục.
 4. Job đang chạy lỗi vì mất đăng nhập → job về hàng đợi, không tăng `attempt` (BR-39).
+
+## 7. LUỒNG 7: MỘT YÊU CẦU TRONG PHÒNG IT PHÂN TÁN (FEAT-07 → FEAT-10)
+
+1. **Ra đề:** partner (web) hoặc owner (web, Telegram `/new`, MCP `create_task`) tạo yêu cầu cho một dự án.
+2. **Duyệt:** owner/ADMIN dự án duyệt (web, Telegram, MCP) → job SPEC.
+3. **Làm rõ:** agent Claude rảnh (máy owner hoặc máy partner là thành viên dự án — DEC-37) đọc skill `agenthub-spec` nhúng trong runner; chưa đủ thông tin → `NEED_INFO`, task `WAITING_USER`, câu hỏi tới người ra đề + Admin (web, GitHub `/answer`, Telegram owner). Trả lời → SPEC chạy lại.
+4. **Thi công & QA:** CODE cho Antigravity, QA cho Claude khác tác giả; CLI chạy với allowlist lệnh của dự án (DEC-34); test cần secret để CI lo (DEC-38).
+5. **Kẹt:** quá 3 lần → REPLAN cho trưởng phòng AI: `retry` / `replan` / `ask_user` / `cancel` (cancel chờ Admin xác nhận — DEC-40).
+6. **Merge:** owner bấm Merge ở web, Telegram hoặc MCP `merge_task`.
+7. **Kiểm sức khoẻ dây chuyền:** sau mỗi lần triển khai hoặc thêm máy, owner bấm Chạy thử trên dự án sandbox (DEC-36).

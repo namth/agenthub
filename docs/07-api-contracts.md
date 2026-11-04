@@ -34,6 +34,11 @@ Tất cả các API REST trả về định dạng chuẩn:
 * **`POST /api/tasks/:id/reject`**:
   - Quyền: Chỉ `ADMIN`.
   - Body: `{ "reason": "Lý do từ chối" }`. Đóng GitHub Issue.
+* **`GET /api/tasks/{id}/clarifications`** · **`POST /api/tasks/{id}/clarify`** · **`POST /api/tasks/{id}/clarify/auto`**: FEAT-07 — quyền và payload ở [features/clarification-and-shared-skills.md](features/clarification-and-shared-skills.md) §6; webhook `issue_comment` nhận `/answer <id>: <giá trị>`.
+* **`POST /api/tasks/{id}/proposals/{pid}/accept`** · **`POST /api/tasks/{id}/proposals/{pid}/reject`**: FEAT-10 — xác nhận đề xuất huỷ của trưởng phòng AI.
+* **`PATCH /api/admin/projects/{id}`** thêm `allowed_commands`, `needs_ci_for_integration`, `is_sandbox`; **`POST /api/admin/projects/{id}/smoke-run`**, **`GET /api/admin/projects/{id}/smoke-runs`**, **`GET /api/admin/projects/{id}/smoke-runs/{run}`**: FEAT-09 ([features/ops-readiness.md](features/ops-readiness.md) §6).
+* **`GET /api/me/tokens`** · **`POST /api/me/tokens`** · **`DELETE /api/me/tokens/{id}`**, **`POST /mcp`** (MCP Streamable HTTP, Bearer token cá nhân, chỉ owner): FEAT-10 ([features/remote-command.md](features/remote-command.md) §6).
+* WS **`ASSIGN_TASK.payload.allowed_commands`**, **`ASSIGN_TASK.payload.needs_ci`** (FEAT-09).
 
 ### 1.3 Nhóm Quản lý Cụm máy (Fleet Management)
 * **`GET /api/fleet`**:

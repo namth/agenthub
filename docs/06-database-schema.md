@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL' 
-        CHECK(status IN ('PENDING_APPROVAL', 'PLANNING', 'READY', 'IN_PROGRESS', 'WAITING_QA', 'QA_PASSED', 'DONE', 'REJECTED')),
+        CHECK(status IN ('PENDING_APPROVAL', 'PLANNING', 'WAITING_USER', 'READY', 'IN_PROGRESS', 'WAITING_QA', 'QA_PASSED', 'DONE', 'REJECTED')),
     assigned_worker_id TEXT REFERENCES workers(id) ON DELETE SET NULL,
     branch_name TEXT,
     pr_url TEXT,
@@ -130,6 +130,22 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_worker ON tasks(assigned_worker_id);
+
+-- Bảng TASK_CLARIFICATIONS (FEAT-07) — định nghĩa đầy đủ (answered_via, asked_by_agent, reminded_at, UNIQUE(task_id, round)) ở features/clarification-and-shared-skills.md §5
+CREATE TABLE IF NOT EXISTS task_clarifications (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    round INTEGER NOT NULL DEFAULT 1,
+    questions TEXT NOT NULL,           -- JSON array các câu hỏi của Trưởng phòng
+    answers TEXT,                     -- JSON object các câu trả lời của người dùng
+    status TEXT NOT NULL DEFAULT 'WAITING' CHECK(status IN ('WAITING', 'ANSWERED')),
+    answered_by TEXT REFERENCES users(id),
+    answered_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_clarifications_task ON task_clarifications(task_id);
+CREATE INDEX IF NOT EXISTS idx_clarifications_status ON task_clarifications(status);
 
 -- Bảng TASK_LOGS (Lưu logs gần nhất)
 CREATE TABLE IF NOT EXISTS task_logs (
@@ -169,6 +185,7 @@ Bảng `task_logs` chỉ lưu giữ tối đa 5000 dòng log gần nhất cho m�
 | 001 | `internal/database/migrations/001_init.sql` | Schema ban đầu (TASK-001…018) |
 | 002 | `002_multi_project.sql` | `projects.weight/max_parallel/webhook_id`, `project_members`, `agent_projects` (FEAT-04 §5) |
 | 003 | `003_join_machine.sql` | `workers.owner_user_id/version/paused`, `agents.lead_eligible`, `join_codes` (FEAT-05 §5) |
+| 005 | `005_ops_remote.sql` | Dựng lại `tasks` để thêm `WAITING_USER`; `task_clarifications`; `projects.allowed_commands/needs_ci_for_integration/is_sandbox`; `smoke_runs`; `personal_tokens`; `lead_proposals` (FEAT-07 §5, FEAT-09 §5, FEAT-10 §5) |
 | 004 | `004_agent_auth_office.sql` | `agents.auth_status/auth_checked_at/auth_detail`, `workers.gh_auth`, `users.last_seen_at`, đặt `lead_eligible = 0` cho agent không phải Claude (FEAT-06 §5, FEAT-02 bản 2 §5) |
 
 `database.Open` áp dụng migration chưa chạy theo `schema_migrations`; DB cũ chưa có bảng này được đánh dấu 001 trước.

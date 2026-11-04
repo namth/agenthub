@@ -32,6 +32,15 @@ TC-11 → TC-27: xem [features/lead-rotation.md](features/lead-rotation.md) mụ
 ### 1.5 Văn phòng ảo (FEAT-02)
 TC-28 → TC-35: xem [features/virtual-office.md](features/virtual-office.md) mục 8 (chuyển sự kiện, che bí mật, RBAC, bật/tắt, nối lại SSE, bố cục động). Bản 2: xem mục 1.8.
 
+### 1.9 Phỏng vấn làm rõ & kỹ năng dùng chung (FEAT-07, FEAT-08)
+TC-74 → TC-82: xem [features/clarification-and-shared-skills.md](features/clarification-and-shared-skills.md) §8 (migration 005, `NEED_INFO`, quyền trả lời, `/answer` GitHub, nhắc 24h/72h, skill nhúng runner, UI).
+
+### 1.10 Vận hành thật & an toàn đa partner (FEAT-09)
+TC-83 → TC-89: xem [features/ops-readiness.md](features/ops-readiness.md) §8 (allowlist CLI không bỏ qua quyền, probe đăng nhập thật, lọc máy partner theo thành viên, chạy thử sandbox).
+
+### 1.11 Điều hành mọi nơi (FEAT-10)
+TC-90 → TC-96: xem [features/remote-command.md](features/remote-command.md) §8 (lệnh Telegram owner, token cá nhân, MCP, REPLAN hành động, responsive 375px).
+
 ---
 
 ## 2. QUY TRÌNH KIỂM ĐỊNH KÉP (2-LAYER QA GATE) KHI MERGE CODE

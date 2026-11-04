@@ -64,6 +64,13 @@ Hệ thống phân biệt quyền hạn dựa trên vai trò ánh xạ từ GitH
 | **Xem trạng thái đăng nhập agent** | ✅ mọi máy | ✅ máy của mình | ❌ | FEAT-06, SCR-05/SCR-11 |
 | **Yêu cầu kiểm lại đăng nhập (`auth-recheck`)** | ✅ mọi máy | ✅ máy của mình | ❌ | FEAT-06 |
 | **Báo trạng thái đăng nhập (`AGENT_AUTH`)** | ❌ | ❌ | ✅ | Chỉ agent thuộc máy mình (BR-05) |
+| **Trả lời phỏng vấn làm rõ (`POST /api/tasks/{id}/clarify`)** | ✅ owner / ADMIN dự án | ✅ task do mình tạo | ❌ | FEAT-07, DEC-33 (partner khác trong dự án chỉ xem) |
+| **Cho trưởng phòng tự quyết (`/clarify/auto`)** | ✅ | ❌ | ❌ | FEAT-07 |
+| **Trả `NEED_INFO` / kết quả REPLAN có hành động** | ❌ | ❌ | ✅ | FEAT-07, FEAT-10 (BR-64) |
+| **Sửa lệnh được phép, chạy thử dây chuyền (SCR-09)** | ✅ owner | ❌ | ❌ | FEAT-09 |
+| **Nhận việc của dự án (máy của mình)** | mọi dự án | ✅ chỉ dự án mình là thành viên | ✅ | FEAT-09, DEC-37 |
+| **Lệnh Telegram, token cá nhân, MCP `/mcp`** | ✅ owner | ❌ | ❌ | FEAT-10, DEC-39 |
+| **Xác nhận đề xuất huỷ của trưởng phòng AI** | ✅ | ❌ | ❌ | FEAT-10 (ADMIN dự án cũng được) |
 
 ---
 
