@@ -83,16 +83,16 @@
   - **DoD:** `go test ./internal/...` qua TC-58, TC-60 → TC-63, TC-66. Chi tiết: [features/agent-auth.md](features/agent-auth.md) §9.
 - [ ] **TASK-031: Runner — kiểm đăng nhập, `auth_patterns`, trả lời `AUTH_RECHECK` (FEAT-06)**
   - **DoD:** `go test ./internal/runner/...` qua TC-57, TC-59.
-- [ ] **TASK-035: Dispatcher — trưởng phòng mọi loại agent (DEC-29)**
+- [ ] **TASK-032: Dispatcher — trưởng phòng mọi loại agent (DEC-29)**
   - **DoD:** `go test ./internal/dispatcher/...` qua TC-64, TC-65; TC-11 → TC-22 vẫn xanh.
-- [ ] **TASK-032: Web — huy hiệu đăng nhập SCR-05/SCR-11, công tắc lead mọi agent, dòng Telegram SCR-07 (FEAT-06)**
+- [ ] **TASK-034: Web — huy hiệu đăng nhập SCR-05/SCR-11, công tắc lead mọi agent, dòng Telegram SCR-07 (FEAT-06)**
   - **DoD:** TC-67; `cd web && npm run typecheck && npm run build`.
 - [ ] **TASK-033: Office server bản 2 — `users`/presence/auth trong snapshot, `last_seen_at`, quyền partner, giới hạn SSE (FEAT-02)**
   - **DoD:** `go test ./internal/office/... ./internal/auth/...` qua TC-28 → TC-32, TC-68 → TC-70. Chi tiết: [features/virtual-office.md](features/virtual-office.md) §9.
-- [ ] **TASK-034: Office UI bản 2 — bố cục hai cụm + khu chỉ huy, nội thất, logo INOVA (FEAT-02)**
+- [ ] **TASK-035: Office UI bản 2 — bố cục hai cụm + khu chỉ huy, nội thất, logo INOVA (FEAT-02)**
   - **DoD:** `cd web && npx vitest run src/office` qua TC-33 → TC-35, TC-71 → TC-73; typecheck + build; ảnh chụp 0/3/9 máy.
 
-**Thứ tự:** TASK-030 → (TASK-031 ∥ TASK-035 ∥ TASK-033) → (TASK-032 ∥ TASK-034). Phạm vi file không chồng nhau: 031 `internal/runner`, 035 `internal/dispatcher` (phần chọn lead/giao job lead), 033 `internal/office` + `internal/auth`, 032 `web/src/pages/Fleet.tsx|MyMachines.tsx|Settings.tsx`, 034 `web/src/office/*` + `web/src/pages/Office.tsx` + `web/src/nav.ts`. TASK-030 chạm `internal/dispatcher` (guard BR-37) nên phải xong trước TASK-035.
+**Thứ tự:** TASK-030 → (TASK-031 ∥ TASK-032 ∥ TASK-033) → (TASK-034 ∥ TASK-035). Phạm vi file không chồng nhau: 031 `internal/runner`, 032 `internal/dispatcher` (phần chọn lead/giao job lead), 033 `internal/office` + `internal/auth`, 034 `web/src/pages/Fleet.tsx|MyMachines.tsx|Settings.tsx`, 035 `web/src/office/*` + `web/src/pages/Office.tsx` + `web/src/nav.ts`. TASK-030 chạm `internal/dispatcher` (guard BR-37) nên phải xong trước TASK-032.
 
 ---
 

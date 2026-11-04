@@ -1,0 +1,4 @@
+c90198363efb8a63aa4fdf134c0bb4aa0f7e5456f777ecee0735c4b9da12c124  handoff/tasks/TASK-032-lead-any-kind/verify.sh
+0a6aec61464705973f0f3f0d8b9a06c2d1b159da2f6e68753612cf95dbbf05db  internal/dispatcher/lead_any_test.go
+99729af0bc1a803196afe57c1937cff0edb08ddc5b4709db4bbbb782ad3e3965  internal/api/fleet_lead_any_test.go
+ed73fbd3f85950d308ffb0994e2f00262dda9713a075079303bb6f46a5641b15  internal/api/fleet_test.go

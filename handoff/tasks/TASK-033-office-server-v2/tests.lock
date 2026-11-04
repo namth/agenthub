@@ -1,0 +1,4 @@
+f2d74e445c47e120d15a3d4c4b5a053a7c33db39a9261a10188a7009b658cd6d  handoff/tasks/TASK-033-office-server-v2/verify.sh
+da7033480a7bbb5886649687a5b2690755c6871c7b2387e072ee55a64cc874a4  internal/office/office_v2_test.go
+e21114195ba16a578a127b8493bc4b38ff89114f9d66d92e76a4fa11d90b6def  internal/office/office_test.go
+39a1be57213ad639d5cbd60f4a16230e9a9a044bbee87c296d20e677a3aa0961  internal/tasks/approved_test.go

@@ -1,0 +1,19 @@
+{
+  "id": "TASK-033",
+  "title": "Office server bản 2: presence, snapshot users/auth, quyền partner, giới hạn SSE",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T16:29:52",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-033-office-server-v2/verify.sh",
+    "internal/office/office_v2_test.go",
+    "internal/office/office_test.go",
+    "internal/tasks/approved_test.go"
+  ]
+}

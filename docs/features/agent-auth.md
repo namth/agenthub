@@ -185,7 +185,7 @@ stateDiagram-v2
 | :--- | :--- | :--- |
 | **TASK-030** | Server: migration `004_agent_auth_office.sql` (gồm cột `users.last_seen_at` cho FEAT-02); gateway nhận `HANDSHAKE` mở rộng, `AGENT_AUTH`, gửi `AUTH_RECHECK`, `AGENT_AUTH` kèm `assignment_id` nhả job; guard BR-37 trong dispatcher; BR-40; Telegram BR-41; API `auth-recheck`, trường mới ở `/api/fleet`, `/api/my/machines`; agent Antigravity khi join `lead_eligible = 0` | `go test ./internal/...` qua TC-58, TC-60 → TC-63, TC-66 |
 | **TASK-031** | Runner: bộ kiểm đăng nhập (BR-38), `auth_patterns` (BR-39), trả lời `AUTH_RECHECK`, `--status` in thêm trạng thái đăng nhập từng agent | `go test ./internal/runner/...` qua TC-57, TC-59 |
-| **TASK-035** | Dispatcher: lead mọi loại agent (BR-42) — bộ chọn lead, giao `lead_only` theo người giữ lease, QA độc lập; `PATCH /api/admin/agents/{id}` và `POST /api/admin/lead/assign` nhận mọi `kind` | `go test ./internal/dispatcher/...` qua TC-64, TC-65 + toàn bộ TC lead cũ (TC-11 → TC-22) vẫn xanh |
-| **TASK-032** | Web: huy hiệu đăng nhập + nút kiểm lại trên SCR-05/SCR-11, công tắc lead/ưu tiên cho mọi agent, dòng Telegram ở SCR-07 | TC-67 + `cd web && npm run typecheck && npm run build` |
+| **TASK-032** | Dispatcher: lead mọi loại agent (BR-42) — bộ chọn lead, giao `lead_only` theo người giữ lease, QA độc lập; `PATCH /api/admin/agents/{id}` và `POST /api/admin/lead/assign` nhận mọi `kind` | `go test ./internal/dispatcher/...` qua TC-64, TC-65 + toàn bộ TC lead cũ (TC-11 → TC-22) vẫn xanh |
+| **TASK-034** | Web: huy hiệu đăng nhập + nút kiểm lại trên SCR-05/SCR-11, công tắc lead/ưu tiên cho mọi agent, dòng Telegram ở SCR-07 | TC-67 + `cd web && npm run typecheck && npm run build` |
 
-Thứ tự: TASK-030 → (TASK-031 ∥ TASK-035) → TASK-032.
+Thứ tự: TASK-030 → (TASK-031 ∥ TASK-032) → TASK-034.

@@ -270,8 +270,9 @@ func TestRBACAndDisabled(t *testing.T) { // TC-30, TC-31
 	if res, m := r.req("GET", "/api/admin/settings", "PARTNER", nil); res.StatusCode != 403 || m["error"].(map[string]any)["code"] != "FORBIDDEN" {
 		t.Fatalf("partner: %d", res.StatusCode)
 	}
-	if _, code := r.stream("PARTNER", ""); code != 403 {
-		t.Fatalf("partner mở stream: %d, muốn 403", code)
+	// DEC-27 (TASK-033): partner được mở stream; văn phòng đang tắt → 404.
+	if _, code := r.stream("PARTNER", ""); code != 404 {
+		t.Fatalf("partner mở stream khi tắt: %d, muốn 404", code)
 	}
 	res, m := r.req("GET", "/api/admin/settings", "ADMIN", nil)
 	if res.StatusCode != 200 || m["data"].(map[string]any)["office_enabled"] != false {

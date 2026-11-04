@@ -1,0 +1,19 @@
+{
+  "id": "TASK-032",
+  "title": "Dispatcher: trưởng phòng mọi loại agent (DEC-29)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T16:27:03",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-032-lead-any-kind/verify.sh",
+    "internal/dispatcher/lead_any_test.go",
+    "internal/api/fleet_lead_any_test.go",
+    "internal/api/fleet_test.go"
+  ]
+}

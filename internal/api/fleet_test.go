@@ -350,8 +350,9 @@ func TestPatchAgent(t *testing.T) {
 			t.Errorf("body %v: %d %+v, muốn 400 VALIDATION_ERROR", b, code, e.Error)
 		}
 	}
-	if code, e := r.do("PATCH", "/api/admin/agents/mac%2Fantigravity", "ADMIN", map[string]any{"lead_priority": 1}); code != 400 || e.Error.Code != "VALIDATION_ERROR" {
-		t.Fatalf("lead_priority cho Antigravity: %d %+v, muốn 400", code, e.Error)
+	// DEC-29 (TASK-032): lead_priority áp dụng cho mọi loại agent.
+	if code, e := r.do("PATCH", "/api/admin/agents/mac%2Fantigravity", "ADMIN", map[string]any{"lead_priority": 1}); code != 200 {
+		t.Fatalf("lead_priority cho Antigravity: %d %+v, muốn 200 (DEC-29)", code, e.Error)
 	}
 	if code, e := r.do("PATCH", "/api/admin/agents/khong%2Fco", "ADMIN", map[string]any{"soft_window_hours": 2}); code != 404 || e.Error.Code != "NOT_FOUND" {
 		t.Fatalf("agent không tồn tại: %d %+v", code, e.Error)
