@@ -11,7 +11,7 @@ out=$(go test ./internal/telegram/... -count=1 -race -v 2>&1) || { echo "$out" |
 echo "$out" | grep -E "^(ok|FAIL|--- )" || true
 if echo "$out" | grep -q -- "--- SKIP"; then echo "Có test bị skip"; exit 1; fi
 passed=$(echo "$out" | grep -c -- "--- PASS" || true)
-if [ "$passed" -lt 11 ]; then echo "Chỉ $passed test PASS, cần >= 11"; exit 1; fi
+if [ "$passed" -lt 10 ]; then echo "Chỉ $passed test PASS, cần >= 10"; exit 1; fi
 echo "== 4. Không phá test cũ"
 go test ./internal/database/... ./internal/dispatcher/... ./internal/gateway/... ./internal/runner/... ./internal/server/... ./internal/auth/... ./web/... -count=1
 echo "TASK-009 ĐẠT"

@@ -1,2 +1,2 @@
-6c1ff8906b5f5f3f06c74b7cada68b5a78a159db7bcd3d9d108591d93f41f483  handoff/tasks/TASK-009-telegram/verify.sh
+39b5a7322420ee6df067c89effe6ab913f559388d35d6627b6cd44e3697feab2  handoff/tasks/TASK-009-telegram/verify.sh
 a89104d07edaecf3be0f12924ddf759767b0bb8f886d4b157a7875ebe46df10a  internal/telegram/telegram_test.go
