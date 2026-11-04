@@ -1,0 +1,18 @@
+{
+  "id": "TASK-024",
+  "title": "UI thêm máy: hộp thoại, SCR-11, SCR-05 nhóm theo chủ",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T14:20:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-024-web-machines/verify.sh",
+    "web/src/pages/machines.test.tsx",
+    "web/src/pages/screens.test.tsx"
+  ]
+}
