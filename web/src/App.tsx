@@ -13,12 +13,18 @@ import Fleet from './pages/Fleet';
 import LiveTerminal from './pages/LiveTerminal';
 import Settings from './pages/Settings';
 import Office from './pages/Office';
+import Projects from './pages/Projects';
+import Contributions from './pages/Contributions';
+import MyMachines from './pages/MyMachines';
 
 const PAGES: Record<string, React.ComponentType> = {
   'SCR-03': TaskCreate,
   'SCR-05': Fleet,
   'SCR-06': LiveTerminal,
   'SCR-08': Office,
+  'SCR-09': Projects,
+  'SCR-10': Contributions,
+  'SCR-11': MyMachines,
 };
 
 export default function App() {

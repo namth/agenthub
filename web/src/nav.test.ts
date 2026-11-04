@@ -1,9 +1,9 @@
 import { sidebarNav, visibleNav } from './nav';
 
 describe('phân quyền điều hướng (docs/02, docs/03)', () => {
-  it('Partner không thấy Fleet, Terminal, Văn phòng, Cài đặt', () => {
+  it('Partner không thấy Fleet, Terminal, Văn phòng, Cài đặt, Dự án', () => {
     const codes = visibleNav('PARTNER', true).map((n) => n.code);
-    expect(codes).toEqual(['SCR-02', 'SCR-03', 'SCR-04']);
+    expect(codes).toEqual(['SCR-02', 'SCR-03', 'SCR-04', 'SCR-11', 'SCR-10']);
   });
 
   it('Admin thấy Văn phòng chỉ khi bật', () => {
