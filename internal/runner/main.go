@@ -65,9 +65,11 @@ func checkStatus(home, statusFile string) int {
 		Connected bool   `json:"connected"`
 		Server    string `json:"server"`
 		Version   string `json:"version"`
+		GhAuth    string `json:"gh_auth"`
 		Agents    []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID         string `json:"id"`
+			Status     string `json:"status"`
+			AuthStatus string `json:"auth_status"`
 		} `json:"agents"`
 		UpdatedAt string `json:"updated_at"`
 	}
@@ -99,7 +101,11 @@ func checkStatus(home, statusFile string) int {
 
 	agentParts := make([]string, len(st.Agents))
 	for i, a := range st.Agents {
-		agentParts[i] = fmt.Sprintf("%s:%s", a.ID, a.Status)
+		authSt := a.AuthStatus
+		if authSt == "" {
+			authSt = "UNKNOWN"
+		}
+		agentParts[i] = fmt.Sprintf("%s:%s:%s", a.ID, a.Status, authSt)
 	}
 	agentsStr := strings.Join(agentParts, ",")
 	if len(agentParts) == 0 {
@@ -236,6 +242,7 @@ func Main(args []string) int {
 		OS:              osName,
 		Agents:          agents,
 		ExhaustPatterns: exhaustPattern,
+		AuthChecks:      DefaultAuthChecks(),
 		OpenPR:          openPR,
 		GitFor:          NewRepoCache(homeDir, func(r string) string { return "https://github.com/" + r + ".git" }, exec),
 		NoUpdate:        noUpdate,
