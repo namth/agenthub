@@ -1,0 +1,4 @@
+77db6731a0c575a8370dcee998ba7c0d9a18e0f5b9974cd35529c9957646b38f  handoff/tasks/TASK-012-office-ui/verify.sh
+53a09f1b9f79b8cbde9d608c362f88de07a6df4e605a2507f68e7daaedb3634a  web/src/office/office.test.tsx
+e555d7c0d384a53d4ef32ef02ee80342ecc6b1ddf81346c1a2423b02e840ee70  web/src/pages/screens.test.tsx
+372d73a7fae549ae7c364c103013b9b8ed261757bda143efa1ebea990415e544  web/src/nav.test.ts

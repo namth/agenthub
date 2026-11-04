@@ -1,0 +1,19 @@
+{
+  "id": "TASK-012",
+  "title": "Giao diện SCR-08 Văn phòng ảo (canvas động từ SSE)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:01:51",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-012-office-ui/verify.sh",
+    "web/src/office/office.test.tsx",
+    "web/src/pages/screens.test.tsx",
+    "web/src/nav.test.ts"
+  ]
+}
