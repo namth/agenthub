@@ -32,6 +32,7 @@ type Config struct {
 	IsOwner    func(userID string) bool
 	IsMember   func(userID, projectID string) bool
 	OnRemoved  func(workerID string)
+	Recheck    func(workerID, agentID string) bool
 }
 
 func (c *Config) now() time.Time {
@@ -404,6 +405,11 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 			agLower := strings.ToLower(agUpper)
 			agentID := workerID + "/" + agLower
 
+			agentLeadEligible := leadEligible
+			if agUpper == "ANTIGRAVITY" {
+				agentLeadEligible = 0
+			}
+
 			_, err = db.Exec(`
 				INSERT INTO agents (id, worker_id, kind, status, lead_eligible)
 				VALUES (?, ?, ?, 'IDLE', ?)
@@ -411,7 +417,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 					worker_id = excluded.worker_id,
 					kind = excluded.kind,
 					lead_eligible = excluded.lead_eligible
-			`, agentID, workerID, agUpper, leadEligible)
+			`, agentID, workerID, agUpper, agentLeadEligible)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
 				return
@@ -472,7 +478,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 		}
 
 		rows, err := db.Query(`
-			SELECT id, name, os, conn_status, version, paused
+			SELECT id, name, os, conn_status, version, paused, gh_auth
 			FROM workers
 			WHERE owner_user_id = ?
 			ORDER BY id
@@ -491,11 +497,14 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 		}
 
 		type agentDTO struct {
-			ID         string         `json:"id"`
-			Kind       string         `json:"kind"`
-			Status     string         `json:"status"`
-			Projects   []string       `json:"projects"`
-			CurrentJob *currentJobDTO `json:"current_job"`
+			ID            string         `json:"id"`
+			Kind          string         `json:"kind"`
+			Status        string         `json:"status"`
+			AuthStatus    string         `json:"auth_status"`
+			AuthDetail    *string        `json:"auth_detail"`
+			AuthCheckedAt *string        `json:"auth_checked_at"`
+			Projects      []string       `json:"projects"`
+			CurrentJob    *currentJobDTO `json:"current_job"`
 		}
 
 		type machineDTO struct {
@@ -505,6 +514,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 			ConnStatus string     `json:"conn_status"`
 			Version    *string    `json:"version"`
 			Paused     bool       `json:"paused"`
+			GhAuth     string     `json:"gh_auth"`
 			Agents     []agentDTO `json:"agents"`
 		}
 
@@ -514,7 +524,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 			var pausedInt int
 			var version sql.NullString
 
-			if err := rows.Scan(&m.ID, &m.Name, &m.OS, &m.ConnStatus, &version, &pausedInt); err != nil {
+			if err := rows.Scan(&m.ID, &m.Name, &m.OS, &m.ConnStatus, &version, &pausedInt, &m.GhAuth); err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
 				return
 			}
@@ -526,7 +536,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 
 			// Query agents của worker
 			agRows, err := db.Query(`
-				SELECT id, kind, status
+				SELECT id, kind, status, auth_status, auth_detail, auth_checked_at
 				FROM agents
 				WHERE worker_id = ?
 				ORDER BY id
@@ -538,10 +548,22 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 
 			for agRows.Next() {
 				var ag agentDTO
-				if err := agRows.Scan(&ag.ID, &ag.Kind, &ag.Status); err != nil {
+				var authDetail, authCheckedAt sql.NullString
+				if err := agRows.Scan(&ag.ID, &ag.Kind, &ag.Status, &ag.AuthStatus, &authDetail, &authCheckedAt); err != nil {
 					agRows.Close()
 					writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
 					return
+				}
+				if authDetail.Valid && authDetail.String != "" {
+					ag.AuthDetail = &authDetail.String
+				}
+				if authCheckedAt.Valid && authCheckedAt.String != "" {
+					if t, err := parseTime(authCheckedAt.String); err == nil {
+						s := t.UTC().Format(time.RFC3339)
+						ag.AuthCheckedAt = &s
+					} else {
+						ag.AuthCheckedAt = &authCheckedAt.String
+					}
 				}
 				ag.Projects = make([]string, 0)
 
@@ -579,6 +601,58 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 		}
 
 		writeJSON(w, http.StatusOK, machines)
+	})
+
+	// POST /api/my/machines/{id}/auth-recheck
+	r.Post("/api/my/machines/{id}/auth-recheck", func(w http.ResponseWriter, req *http.Request) {
+		userID, ok := authz(req)
+		if !ok || userID == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+			return
+		}
+
+		id := chi.URLParam(req, "id")
+		var ownerID sql.NullString
+		err := db.QueryRow("SELECT owner_user_id FROM workers WHERE id = ?", id).Scan(&ownerID)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "machine not found")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
+			return
+		}
+
+		if (!ownerID.Valid || ownerID.String != userID) && !cfg.isOwner(userID) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+			return
+		}
+
+		var body struct {
+			AgentID string `json:"agent_id"`
+		}
+		if req.Body != nil {
+			_ = json.NewDecoder(req.Body).Decode(&body)
+		}
+
+		if body.AgentID != "" {
+			var count int
+			err = db.QueryRow("SELECT COUNT(*) FROM agents WHERE id = ? AND worker_id = ?", body.AgentID, id).Scan(&count)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
+				return
+			}
+			if count == 0 {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "agent does not belong to machine")
+				return
+			}
+		}
+
+		if cfg.Recheck == nil || !cfg.Recheck(id, body.AgentID) {
+			writeError(w, http.StatusConflict, "WORKER_OFFLINE", "worker is offline")
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "queued"})
 	})
 
 	// PATCH /api/my/machines/{id}

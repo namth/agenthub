@@ -110,6 +110,9 @@ type AgentItem struct {
 	SoftWindowHours int             `json:"soft_window_hours"`
 	JobsInWindow    int             `json:"jobs_in_window"`
 	LeadEligible    bool            `json:"lead_eligible"`
+	AuthStatus      string          `json:"auth_status"`
+	AuthDetail      *string         `json:"auth_detail"`
+	AuthCheckedAt   *string         `json:"auth_checked_at"`
 	Projects        *[]string       `json:"projects"`
 	CurrentJob      *CurrentJobItem `json:"current_job"`
 }
@@ -128,6 +131,7 @@ type WorkerItem struct {
 	Owner        *WorkerOwner `json:"owner"`
 	Version      *string      `json:"version"`
 	Paused       bool         `json:"paused"`
+	GhAuth       string       `json:"gh_auth"`
 	Agents       []AgentItem  `json:"agents"`
 }
 
@@ -222,7 +226,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 	// Workers
 	workers := make([]WorkerItem, 0)
 	rows, err := db.Query(`
-		SELECT w.id, w.name, w.os, w.conn_status, w.offline_since, w.version, w.paused, u.id, u.username
+		SELECT w.id, w.name, w.os, w.conn_status, w.offline_since, w.version, w.paused, u.id, u.username, w.gh_auth
 		FROM workers w
 		LEFT JOIN users u ON w.owner_user_id = u.id
 		ORDER BY w.id ASC
@@ -240,7 +244,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 		var pausedInt int
 		var uID sql.NullString
 		var uName sql.NullString
-		if err := rows.Scan(&wk.ID, &wk.Name, &wk.OS, &wk.ConnStatus, &offVal, &verVal, &pausedInt, &uID, &uName); err != nil {
+		if err := rows.Scan(&wk.ID, &wk.Name, &wk.OS, &wk.ConnStatus, &offVal, &verVal, &pausedInt, &uID, &uName, &wk.GhAuth); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi đọc workers")
 			return
 		}
@@ -300,14 +304,24 @@ func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
 	var lp sql.NullInt64
 	var sm sql.NullInt64
 	var leadEligibleInt int
+	var authStatus string
+	var authDetail, authCheckedAt sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours, lead_eligible
+		`SELECT id, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours, lead_eligible, auth_status, auth_detail, auth_checked_at
 		 FROM agents WHERE id = ?`,
 		agentID,
-	).Scan(&ag.ID, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours, &leadEligibleInt)
+	).Scan(&ag.ID, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours, &leadEligibleInt, &authStatus, &authDetail, &authCheckedAt)
 	if err != nil {
 		return nil, err
+	}
+
+	ag.AuthStatus = authStatus
+	if authDetail.Valid && authDetail.String != "" {
+		ag.AuthDetail = &authDetail.String
+	}
+	if authCheckedAt.Valid && authCheckedAt.String != "" {
+		ag.AuthCheckedAt = formatRFC3339(authCheckedAt.String)
 	}
 
 	ag.LeadEligible = (leadEligibleInt != 0)

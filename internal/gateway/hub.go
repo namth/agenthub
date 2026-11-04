@@ -116,6 +116,33 @@ func (h *Hub) CloseWorker(workerID string) bool {
 	return c.close()
 }
 
+func (h *Hub) SendAuthRecheck(workerID, agentID string) bool {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return false
+	}
+	c := h.clients[workerID]
+	h.mu.Unlock()
+
+	if c == nil {
+		return false
+	}
+
+	m := map[string]any{
+		"event": "AUTH_RECHECK",
+	}
+	if agentID != "" {
+		m["agent_id"] = agentID
+	}
+	payload, err := json.Marshal(m)
+	if err != nil {
+		return false
+	}
+	c.enqueue(payload)
+	return true
+}
+
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("X-Runner-Token")
 	if token == "" {
