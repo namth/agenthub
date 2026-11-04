@@ -1,13 +1,33 @@
 {
   "id": "TASK-026",
   "title": "Tasks, pipeline, webhook, gateway theo dự án",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "a99fd6cd-7660-427d-844f-f285b7661bf4",
   "history": [
     {
       "at": "2026-11-04T12:07:27",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T12:09:05",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T12:09:26",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:20:18",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T14:12:43",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
@@ -27,5 +47,6 @@
     "internal/tasks/multi_test.go",
     "internal/tasks/service_test.go",
     "internal/tasks/tasks_test.go"
-  ]
+  ],
+  "via": "agy"
 }

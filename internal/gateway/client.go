@@ -258,6 +258,11 @@ func (c *clientConn) handleRequestTask(env incomingEnvelope) {
 	if c.hub.promptFn != nil {
 		payload["prompt"] = c.hub.promptFn(*asg)
 	}
+	if c.hub.repoFn != nil {
+		if repo := c.hub.repoFn(*asg); repo != "" {
+			payload["repo"] = repo
+		}
+	}
 
 	resp := map[string]any{
 		"event":         "ASSIGN_TASK",
