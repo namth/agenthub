@@ -176,6 +176,22 @@ func main() {
 			if err := pl.OnSubmitted(context.Background(), workerID, assignmentID, prURL, result); err != nil {
 				log.Printf("pipeline: %s: %v", assignmentID, err)
 			}
+			if tg != nil {
+				var taskID, title, pr, status string
+				row := db.QueryRow(`
+					SELECT t.id, t.title, COALESCE(t.pr_url, ''), t.status
+					FROM assignments a
+					JOIN jobs j ON a.job_id = j.id
+					JOIN tasks t ON j.task_id = t.id
+					WHERE a.id = ?
+				`, assignmentID)
+				if err := row.Scan(&taskID, &title, &pr, &status); err == nil && status == "QA_PASSED" {
+					if pr == "" {
+						pr = prURL
+					}
+					tg.NotifyQAPassed(taskID, title, pr)
+				}
+			}
 		}),
 		gateway.WithServerVersion(runner.Version),
 		gateway.WithVersionSink(func(workerID, version string) {
@@ -334,7 +350,8 @@ func main() {
 		{Pattern: "/api/admin/workers/*", Handler: logs.Handler(db, logStore, roleOf)},
 	}
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" && tgSender != nil {
-		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandler(tgSender, tasksSvc, tgChat, secret)})
+		commander := NewTelegramCommander(db, tasksSvc, sysOwner)
+		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandlerWith(tgSender, tasksSvc, commander, tgChat, secret)})
 	}
 	if secret := os.Getenv("GITHUB_WEBHOOK_SECRET"); secret != "" {
 		whOpts := []tasks.WebhookOption{
