@@ -10,14 +10,16 @@ export default function Settings({ onOfficeChange }: SettingsProps = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [officeEnabled, setOfficeEnabled] = useState(false);
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get<{ office_enabled: boolean }>('/api/admin/settings');
+      const data = await api.get<{ office_enabled: boolean; telegram_enabled?: boolean }>('/api/admin/settings');
       setOfficeEnabled(Boolean(data?.office_enabled));
+      setTelegramEnabled(Boolean(data?.telegram_enabled));
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setError(err.message || err.code);
@@ -92,6 +94,13 @@ export default function Settings({ onOfficeChange }: SettingsProps = {}) {
         <p className="mt-1 pl-7 text-xs text-slate-500">
           Hiển thị màn hình quan sát văn phòng ảo (SCR-08) mô phỏng dàn máy và agent đang làm việc trong thời gian thực.
         </p>
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <p className="text-sm text-slate-700">
+            {telegramEnabled
+              ? 'Telegram: đang bật (cấu hình trong .env)'
+              : 'Telegram: đang tắt (cấu hình trong .env)'}
+          </p>
+        </div>
       </div>
     </section>
   );

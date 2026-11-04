@@ -1,17 +1,33 @@
 {
   "id": "TASK-034",
   "title": "Web: huy hiệu đăng nhập SCR-05/SCR-11, lead mọi agent, dòng Telegram SCR-07",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "8302be17-4e29-4f70-b7f0-da3c82627210",
   "history": [
     {
       "at": "2026-11-04T16:31:59",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T16:34:28",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-medium)"
+    },
+    {
+      "at": "2026-11-04T16:34:42",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T16:44:47",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-034-web-agent-auth/verify.sh",
     "web/src/pages/agentauth.test.tsx"
-  ]
+  ],
+  "via": "agy"
 }
