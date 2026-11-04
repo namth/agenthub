@@ -1,0 +1,38 @@
+{
+  "id": "TASK-006",
+  "title": "REST API Fleet & quản trị trưởng phòng (GET /api/fleet, trao/thu hồi lead, sửa agent)",
+  "status": "accepted",
+  "conversation_id": "ac6be0cc-9bdc-43bd-b1a0-9f3875f71d1a",
+  "history": [
+    {
+      "at": "2026-11-04T08:39:14",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T08:41:07",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T08:41:20",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T08:48:56",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T08:50:09",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-006-fleet-api/verify.sh",
+    "internal/api/fleet_test.go"
+  ],
+  "via": "agy"
+}
