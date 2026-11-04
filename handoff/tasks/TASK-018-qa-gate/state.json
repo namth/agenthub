@@ -1,7 +1,7 @@
 {
   "id": "TASK-018",
   "title": "Chốt chặn CI trước QA, Merge PR → DONE, webhook workflow_run/pull_request",
-  "status": "in_progress",
+  "status": "accepted",
   "conversation_id": "57a1195c-1822-4c44-882e-1d5cafcd308f",
   "history": [
     {
@@ -18,6 +18,16 @@
       "at": "2026-11-04T09:40:16",
       "status": "in_progress",
       "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:53:45",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:53:58",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [

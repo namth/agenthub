@@ -7,7 +7,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/pipeline"
 )
 
