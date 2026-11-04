@@ -18,16 +18,23 @@ type Hub struct {
 	auth     Authenticator
 	upgrader websocket.Upgrader
 
-	promptFn      func(dispatcher.Assignment) string
-	repoFn        func(dispatcher.Assignment) string
-	submitHook    func(workerID, assignmentID, prURL string, result json.RawMessage)
-	logSink       func(workerID, assignmentID, chunk string)
-	serverVersion string
-	versionSink   func(workerID, version string)
+	promptFn        func(dispatcher.Assignment) string
+	repoFn          func(dispatcher.Assignment) string
+	payloadExtrasFn func(dispatcher.Assignment) map[string]any
+	submitHook      func(workerID, assignmentID, prURL string, result json.RawMessage)
+	logSink         func(workerID, assignmentID, chunk string)
+	serverVersion   string
+	versionSink     func(workerID, version string)
 
 	mu      sync.Mutex
 	clients map[string]*clientConn
 	closed  bool
+}
+
+func WithPayloadExtras(fn func(dispatcher.Assignment) map[string]any) Option {
+	return func(h *Hub) {
+		h.payloadExtrasFn = fn
+	}
 }
 
 func WithPrompt(fn func(dispatcher.Assignment) string) Option {

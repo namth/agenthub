@@ -82,6 +82,68 @@ func (p *Pipeline) RepoFor(a dispatcher.Assignment) string {
 	return repo
 }
 
+func DefaultAllowedCommands() []string {
+	return []string{"git", "gh pr create", "gh pr view", "ls", "cat", "grep", "find", "head", "tail", "wc"}
+}
+
+func (p *Pipeline) PayloadFor(a dispatcher.Assignment) map[string]any {
+	var rawCmds sql.NullString
+	var needsCI int
+	var found bool
+
+	if a.JobID != "" {
+		err := p.db.QueryRow(`
+			SELECT p.allowed_commands, p.needs_ci_for_integration
+			FROM jobs j
+			JOIN projects p ON p.id = j.project_id
+			WHERE j.id = ?
+		`, a.JobID).Scan(&rawCmds, &needsCI)
+		if err == nil {
+			found = true
+		}
+	}
+	if !found && a.TaskID != "" {
+		err := p.db.QueryRow(`
+			SELECT p.allowed_commands, p.needs_ci_for_integration
+			FROM tasks t
+			JOIN projects p ON p.id = t.project_id
+			WHERE t.id = ?
+		`, a.TaskID).Scan(&rawCmds, &needsCI)
+		if err == nil {
+			found = true
+		}
+	}
+
+	defaults := DefaultAllowedCommands()
+	seen := make(map[string]bool)
+	cmds := make([]string, 0, len(defaults))
+
+	for _, c := range defaults {
+		if !seen[c] {
+			seen[c] = true
+			cmds = append(cmds, c)
+		}
+	}
+
+	if found && rawCmds.Valid && strings.TrimSpace(rawCmds.String) != "" {
+		var projCmds []string
+		if err := json.Unmarshal([]byte(rawCmds.String), &projCmds); err == nil {
+			for _, c := range projCmds {
+				c = strings.TrimSpace(c)
+				if c != "" && !seen[c] {
+					seen[c] = true
+					cmds = append(cmds, c)
+				}
+			}
+		}
+	}
+
+	return map[string]any{
+		"allowed_commands": cmds,
+		"needs_ci":         needsCI != 0,
+	}
+}
+
 func clamp(s string, maxLen int) string {
 	r := []rune(s)
 	if len(r) > maxLen {

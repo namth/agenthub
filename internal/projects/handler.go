@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
+
+var allowedCommandRegex = regexp.MustCompile(`^[a-zA-Z0-9_./ -]{1,60}$`)
 
 type apiResponse struct {
 	Success bool      `json:"success"`
@@ -46,16 +49,19 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 }
 
 type projectListItem struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	GitHubRepo    string `json:"github_repo"`
-	DefaultBranch string `json:"default_branch"`
-	Status        string `json:"status"`
-	Role          string `json:"role"`
-	Weight        int    `json:"weight"`
-	MaxParallel   *int   `json:"max_parallel"`
-	WebhookOK     bool   `json:"webhook_ok"`
-	OpenTasks     int    `json:"open_tasks"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	GitHubRepo            string   `json:"github_repo"`
+	DefaultBranch         string   `json:"default_branch"`
+	Status                string   `json:"status"`
+	Role                  string   `json:"role"`
+	Weight                int      `json:"weight"`
+	MaxParallel           *int     `json:"max_parallel"`
+	WebhookOK             bool     `json:"webhook_ok"`
+	OpenTasks             int      `json:"open_tasks"`
+	AllowedCommands       []string `json:"allowed_commands"`
+	NeedsCIForIntegration bool     `json:"needs_ci_for_integration"`
+	IsSandbox             bool     `json:"is_sandbox"`
 }
 
 type adminRepoItem struct {
@@ -131,14 +137,14 @@ func (s *Service) handleListProjects(w http.ResponseWriter, r *http.Request, use
 
 	if s.IsOwner(login) {
 		rows, err = s.db.QueryContext(r.Context(), `
-			SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id,
+			SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id, allowed_commands, needs_ci_for_integration, is_sandbox,
 				(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = projects.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
 			FROM projects
 			ORDER BY created_at ASC
 		`)
 	} else {
 		rows, err = s.db.QueryContext(r.Context(), `
-			SELECT p.id, p.name, p.github_repo, p.default_branch, p.status, pm.role, p.weight, p.max_parallel, p.webhook_id,
+			SELECT p.id, p.name, p.github_repo, p.default_branch, p.status, pm.role, p.weight, p.max_parallel, p.webhook_id, p.allowed_commands, p.needs_ci_for_integration, p.is_sandbox,
 				(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = p.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
 			FROM projects p
 			JOIN project_members pm ON p.id = pm.project_id
@@ -158,7 +164,9 @@ func (s *Service) handleListProjects(w http.ResponseWriter, r *http.Request, use
 		var it projectListItem
 		var mp sql.NullInt64
 		var wid sql.NullInt64
-		if err := rows.Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &it.OpenTasks); err != nil {
+		var rawCmds sql.NullString
+		var ciInt, sbInt int
+		if err := rows.Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &rawCmds, &ciInt, &sbInt, &it.OpenTasks); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "scan error")
 			return
 		}
@@ -167,6 +175,15 @@ func (s *Service) handleListProjects(w http.ResponseWriter, r *http.Request, use
 			it.MaxParallel = &v
 		}
 		it.WebhookOK = wid.Valid && wid.Int64 > 0
+		it.NeedsCIForIntegration = (ciInt != 0)
+		it.IsSandbox = (sbInt != 0)
+		it.AllowedCommands = make([]string, 0)
+		if rawCmds.Valid && strings.TrimSpace(rawCmds.String) != "" {
+			_ = json.Unmarshal([]byte(rawCmds.String), &it.AllowedCommands)
+			if it.AllowedCommands == nil {
+				it.AllowedCommands = make([]string, 0)
+			}
+		}
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
@@ -270,7 +287,7 @@ func (s *Service) handlePatchProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k := range body {
-		if k != "weight" && k != "max_parallel" && k != "status" {
+		if k != "weight" && k != "max_parallel" && k != "status" && k != "allowed_commands" && k != "needs_ci_for_integration" && k != "is_sandbox" {
 			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "unknown field: "+k)
 			return
 		}
@@ -311,6 +328,87 @@ func (s *Service) handlePatchProject(w http.ResponseWriter, r *http.Request) {
 		}
 		setClauses = append(setClauses, "status = ?")
 		args = append(args, sStr)
+	}
+
+	if v, ok := body["needs_ci_for_integration"]; ok {
+		b, isBool := v.(bool)
+		if !isBool {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "needs_ci_for_integration must be boolean")
+			return
+		}
+		val := 0
+		if b {
+			val = 1
+		}
+		setClauses = append(setClauses, "needs_ci_for_integration = ?")
+		args = append(args, val)
+	}
+
+	if v, ok := body["is_sandbox"]; ok {
+		b, isBool := v.(bool)
+		if !isBool {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "is_sandbox must be boolean")
+			return
+		}
+		val := 0
+		if b {
+			val = 1
+		}
+		setClauses = append(setClauses, "is_sandbox = ?")
+		args = append(args, val)
+	}
+
+	if v, ok := body["allowed_commands"]; ok {
+		if v == nil {
+			setClauses = append(setClauses, "allowed_commands = NULL")
+		} else {
+			items, isSlice := v.([]any)
+			if !isSlice {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands must be an array of strings or null")
+				return
+			}
+			if len(items) > 40 {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands must not exceed 40 items")
+				return
+			}
+			cleaned := make([]string, 0, len(items))
+			for _, item := range items {
+				str, isStr := item.(string)
+				if !isStr {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands items must be strings")
+					return
+				}
+				str = strings.TrimSpace(str)
+				if len(str) < 1 || len(str) > 60 {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands item length must be between 1 and 60")
+					return
+				}
+				if !allowedCommandRegex.MatchString(str) {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands item contains invalid characters")
+					return
+				}
+				if strings.Contains(str, "sudo") {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands must not contain sudo")
+					return
+				}
+				if str == "*" {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands must not be *")
+					return
+				}
+				if strings.Contains(str, "rm -rf /") {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "allowed_commands must not contain rm -rf /")
+					return
+				}
+				cleaned = append(cleaned, str)
+			}
+			b, err := json.Marshal(cleaned)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to marshal allowed_commands")
+				return
+			}
+			setClauses = append(setClauses, "allowed_commands = ?")
+			args = append(args, string(b))
+		}
 	}
 
 	if len(setClauses) > 0 {
@@ -358,12 +456,14 @@ func (s *Service) handleRecreateWebhook(w http.ResponseWriter, r *http.Request) 
 	var it projectListItem
 	var mp sql.NullInt64
 	var wid sql.NullInt64
+	var rawCmds sql.NullString
+	var ciInt, sbInt int
 	err = s.db.QueryRowContext(r.Context(), `
-		SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id,
+		SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id, allowed_commands, needs_ci_for_integration, is_sandbox,
 			(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = projects.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
 		FROM projects
 		WHERE id = ?
-	`, id).Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &it.OpenTasks)
+	`, id).Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &rawCmds, &ciInt, &sbInt, &it.OpenTasks)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
 		return
@@ -374,6 +474,15 @@ func (s *Service) handleRecreateWebhook(w http.ResponseWriter, r *http.Request) 
 		it.MaxParallel = &v
 	}
 	it.WebhookOK = wid.Valid && wid.Int64 > 0
+	it.NeedsCIForIntegration = (ciInt != 0)
+	it.IsSandbox = (sbInt != 0)
+	it.AllowedCommands = make([]string, 0)
+	if rawCmds.Valid && strings.TrimSpace(rawCmds.String) != "" {
+		_ = json.Unmarshal([]byte(rawCmds.String), &it.AllowedCommands)
+		if it.AllowedCommands == nil {
+			it.AllowedCommands = make([]string, 0)
+		}
+	}
 
 	writeSuccess(w, http.StatusOK, it)
 }

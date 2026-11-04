@@ -1,13 +1,33 @@
 {
   "id": "TASK-041",
   "title": "Allowlist lệnh theo dự án, runner cấp quyền CLI không bỏ qua quyền",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "ef3b8966-3c67-4b0f-a0c0-c62776dc787e",
   "history": [
     {
       "at": "2026-11-04T21:36:45",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T21:51:24",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T21:51:49",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T22:02:38",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:04:06",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
@@ -16,5 +36,6 @@
     "internal/pipeline/allowlist_test.go",
     "internal/gateway/extras_test.go",
     "internal/projects/allowlist_test.go"
-  ]
+  ],
+  "via": "agy"
 }
