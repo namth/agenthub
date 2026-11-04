@@ -1,13 +1,28 @@
 {
   "id": "TASK-027",
   "title": "Dispatcher đa dự án: chia lượt theo weight, max_parallel, danh sách dự án của agent, máy tạm dừng, lead_eligible",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "06384d74-9f79-450f-ab03-951ad0dffc1f",
   "history": [
     {
       "at": "2026-11-04T11:51:00",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T11:52:26",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T11:52:42",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:00:32",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
@@ -17,5 +32,6 @@
     "internal/dispatcher/dispatcher_events_test.go",
     "internal/dispatcher/dispatcher_office_test.go",
     "internal/dispatcher/types.go"
-  ]
+  ],
+  "via": "agy"
 }
