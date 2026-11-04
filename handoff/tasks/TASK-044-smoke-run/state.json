@@ -1,18 +1,29 @@
 {
   "id": "TASK-044",
   "title": "Dự án sandbox: Chạy thử dây chuyền + giao diện SCR-09 (allowlist, sandbox)",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "in_progress",
+  "conversation_id": "c3396cde-b7ac-457f-a512-9dc4aa330dd6",
   "history": [
     {
       "at": "2026-11-04T22:07:00",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T22:18:18",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T22:18:29",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-044-smoke-run/verify.sh",
     "internal/smoke/smoke_test.go",
     "web/src/pages/projects_ops.test.tsx"
-  ]
+  ],
+  "via": "agy"
 }
