@@ -1,0 +1,21 @@
+{
+  "id": "TASK-021",
+  "title": "Runner đa repo, phiên bản + tự cập nhật, lệnh --status",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T11:54:48",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-021-runner-multi/verify.sh",
+    "internal/runner/multi_test.go",
+    "internal/runner/runner_test.go",
+    "internal/runner/integration_test.go",
+    "internal/runner/result_test.go",
+    "internal/runner/exec_group_test.go"
+  ]
+}
