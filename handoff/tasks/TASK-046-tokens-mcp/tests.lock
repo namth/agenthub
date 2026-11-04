@@ -2,3 +2,4 @@
 da3c9f0c48f8352f377967b72145246baebed0ee653b483e033d62a399d78490  internal/tokens/tokens_test.go
 4583e82d733d81d72279348b67e293167c58b3f47d98bb42ba6a7b62fa16d85f  internal/mcp/mcp_test.go
 cbd4abdeb3f771d72351d64d204102370405db01fd5f14469e97bf87da32890c  web/src/pages/profile.test.tsx
+259a3b5e98db432363761c26b3441dcab1037a941c435e08fdf70ff2252be9f6  web/src/nav.test.ts
