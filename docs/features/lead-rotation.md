@@ -1,6 +1,8 @@
 # FEAT-01: Luân chuyển Trưởng phòng & Chuyển giao khi hết limit
 
-> Quyết định liên quan: DEC-01 → DEC-06, DEC-09 (`docs/14-decisions.md`).
+> Quyết định liên quan: DEC-01 → DEC-06, DEC-09, **DEC-29** (`docs/14-decisions.md`).
+>
+> **Sửa đổi 2026-11-04 (DEC-29, FEAT-06):** lead không còn khoá cho Claude — agent bất kỳ có `lead_eligible = 1` đều là ứng viên; agent `NEEDS_AUTH` bị loại (BR-37, BR-40, BR-42 ở [agent-auth.md](agent-auth.md)). Các chỗ ghi "Claude" trong sơ đồ dưới là ví dụ mặc định.
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
@@ -114,7 +116,7 @@ server     ⚫ 1m20s  agy      BUSY #102 (lần 2)   –              –       
 ```
 
 - **Thẻ Lead** trên cùng: tên agent, `epoch`, thời gian đến lần gia hạn kế tiếp. Trạng thái `VACANT` → thẻ màu hổ phách "Chưa có trưởng phòng — dự kiến 21:40", job trí tuệ đang chờ: N.
-- **Nút "Trao vai"** chỉ hiện ở agent `CLAUDE`, `IDLE`, máy `ONLINE`, không phải lead hiện tại. Bấm → hộp xác nhận "Trao vai lead cho laptop/claude? Lead hiện tại sẽ bị thu hồi."
+- **Nút "Trao vai"** chỉ hiện ở agent `lead_eligible` (mọi loại, DEC-29), `IDLE`, không `NEEDS_AUTH`, máy `ONLINE`, không phải lead hiện tại. Bấm → hộp xác nhận "Trao vai lead cho laptop/claude? Lead hiện tại sẽ bị thu hồi."
 - **Nút "Thu hồi vai"** → hộp xác nhận; sau khi thu hồi server tự chọn người kế nhiệm theo BR-06, loại trừ agent vừa bị thu hồi trong 10 phút.
 - **Drawer "Sửa agent"**: `lead_priority` (số nguyên 1–99 hoặc để trống), `soft_max_jobs` (1–500 hoặc trống = tắt), `soft_window_hours` (1–24).
 - **LED:** 🟢 `ONLINE`, ⚫ `OFFLINE` (kèm thời gian mất kết nối); agent: xanh `IDLE`, vàng cam `BUSY`, tím `COOLDOWN` (kèm đếm ngược).
@@ -126,7 +128,7 @@ server     ⚫ 1m20s  agy      BUSY #102 (lần 2)   –              –       
 | **Error** | Banner đỏ "Mất kết nối máy chủ — đang thử lại" + nút "Thử lại"; giữ dữ liệu cũ, làm mờ. Lỗi thao tác (`409 AGENT_NOT_ELIGIBLE`) → toast "Agent không còn đủ điều kiện nhận vai (đang bận/nghỉ/mất kết nối)". |
 | **Success** | Bảng như trên, cập nhật trực tiếp qua WebSocket dashboard. |
 
-**Validate:** `lead_priority` ∈ [1, 99] hoặc null; `soft_max_jobs` ∈ [1, 500] hoặc null; `soft_window_hours` ∈ [1, 24]; chỉ agent `CLAUDE` có `lead_priority`.
+**Validate:** `lead_priority` ∈ [1, 99] hoặc null; `soft_max_jobs` ∈ [1, 500] hoặc null; `soft_window_hours` ∈ [1, 24]; mọi agent có `lead_priority` (DEC-29).
 
 ## 5. Tác động dữ liệu (diff schema)
 
@@ -296,8 +298,8 @@ CREATE INDEX IF NOT EXISTS idx_lead_journal_task ON lead_journal(task_id, create
 | **BR-03** | Bản tin `LEASE_RENEW`/`LEAD_RELEASE`/`LEAD_ACTION` mang `epoch` khác `lead_lease.epoch` hoặc `agent_id` khác người giữ → `ERROR STALE_EPOCH`, không có tác dụng. Runner nhận lỗi này phải dừng mọi việc lead. |
 | **BR-04** | Bản tin `LOG_CHUNK`/`TASK_SUBMITTED`/`AGENT_EXHAUSTED` mang `assignment_id` khác `jobs.current_assignment_id` hoặc assignment không còn `ACTIVE` → `ERROR STALE_ASSIGNMENT`, bỏ qua. PR do máy cũ lỡ mở được server đóng kèm bình luận "bị thay thế bởi lần thử N". |
 | **BR-05** | Runner chỉ được báo cho agent thuộc máy của mình (`agents.worker_id` = máy của kết nối) → sai thì `ERROR AGENT_NOT_OWNED`. |
-| **BR-06** | Chọn lead kế nhiệm trong các agent `CLAUDE`, `status = IDLE`, máy `ONLINE`, không trong danh sách loại trừ 10 phút (vừa bị Admin thu hồi): sắp theo `lead_priority` tăng dần (NULL cuối) → số hạn mềm còn lại giảm dần (tắt hạn mềm = vô hạn) → `idle_since` cũ nhất. |
-| **BR-07** | Không có ứng viên → `lead_lease.state = VACANT`, ghi `vacant_since`. Job `lead_only = 1` và mọi job `required_agent = CLAUDE` nằm `QUEUED`; job `CODE` vẫn giao bình thường. Telegram báo khi vào và khi thoát `VACANT` (mỗi lần một tin). Antigravity không bao giờ giữ lease. |
+| **BR-06** | *(sửa theo DEC-29)* Chọn lead kế nhiệm trong các agent **`lead_eligible = 1` (mọi `kind`)**, `status = IDLE`, `auth_status <> NEEDS_AUTH`, máy `ONLINE`, không trong danh sách loại trừ 10 phút (vừa bị Admin thu hồi): sắp theo `lead_priority` tăng dần (NULL cuối) → số hạn mềm còn lại giảm dần (tắt hạn mềm = vô hạn) → `idle_since` cũ nhất. |
+| **BR-07** | Không có ứng viên → `lead_lease.state = VACANT`, ghi `vacant_since`. Job `lead_only = 1` và mọi job `required_agent = CLAUDE` nằm `QUEUED`; job `CODE` vẫn giao bình thường. Telegram báo khi vào và khi thoát `VACANT` (mỗi lần một tin). ~~Antigravity không bao giờ giữ lease.~~ *(thay bởi DEC-29/BR-42: `VACANT` khi không còn ứng viên nào thuộc mọi loại.)* |
 | **BR-08** | Phát hiện hết limit: runner so stderr/stdout cuối của CLI với `exhaust_patterns` (không phân biệt hoa thường); khớp → `AGENT_EXHAUSTED`. `resets_at` lấy từ thông báo nếu có, không thì `now + default_cooldown_min` (60). Server đặt agent `COOLDOWN`, `cooldown_reason = EXHAUSTED`. |
 | **BR-09** | Hạn mềm: khi số assignment của agent bắt đầu trong `soft_window_hours` gần nhất ≥ `soft_max_jobs` → agent không nhận job mới, `COOLDOWN` với `cooldown_reason = SOFT_LIMIT`, `cooldown_until` = lúc assignment cũ nhất trong cửa sổ ra khỏi cửa sổ. Job đang chạy vẫn làm xong. Nếu agent là lead → runner gửi `LEAD_RELEASE(SOFT_LIMIT)` ngay khi xong job hiện tại. |
 | **BR-10** | `COOLDOWN → IDLE` khi `now ≥ cooldown_until` (ticker 10 giây). Về `IDLE` mà lease đang `VACANT` → nhận lease ngay (BR-06). |

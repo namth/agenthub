@@ -66,7 +66,7 @@ CREATE TABLE join_codes (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
-- Máy đăng ký qua `/api/fleet/join` của partner: `agents.lead_eligible = 0`; của owner: 1. Máy cũ (đăng ký bằng `RUNNER_REGISTRATION_KEY`) `owner_user_id = NULL` → hiển thị "Hệ thống".
+- Máy đăng ký qua `/api/fleet/join` của partner: `agents.lead_eligible = 0`; của owner: 1 cho Claude, **0 cho Antigravity** (DEC-29, migration 004 sửa dữ liệu cũ). Máy cũ (đăng ký bằng `RUNNER_REGISTRATION_KEY`) `owner_user_id = NULL` → hiển thị "Hệ thống".
 - Trang Đóng góp không thêm bảng (DEC-21).
 
 ## 6. Hợp đồng API

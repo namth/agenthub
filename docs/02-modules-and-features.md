@@ -54,12 +54,16 @@ Hệ thống phân biệt quyền hạn dựa trên vai trò ánh xạ từ GitH
 | **Stream stdout/stderr về Server** | ❌ | ❌ | ✅ | Buffer 100ms / stream chunk |
 | **Chạy kiểm định QA tự động (Claude)** | ✅ | ❌ | ✅ (Claude) | Kích hoạt khi PR được mở |
 | **Bấm nút Merge PR vào nhánh `main`** | ✅ | ❌ | ❌ | Quyền quyết định cuối cùng |
-| **Cấu hình Telegram Bot & Webhooks** | ✅ | ❌ | ❌ | Thiết lập hệ thống |
+| **Cấu hình Telegram Bot & Webhooks** | ✅ | ❌ | ❌ | Qua `.env` trên server (DEC-30); SCR-07 chỉ hiện trạng thái |
 | **Trao / thu hồi vai Trưởng phòng (lead)** | ✅ | ❌ | ❌ | FEAT-01, SCR-05 |
 | **Sửa ưu tiên lead & hạn mềm của agent** | ✅ | ❌ | ❌ | FEAT-01 |
 | **Báo hết limit (`AGENT_EXHAUSTED`)** | ❌ | ❌ | ✅ | Chỉ cho agent thuộc máy mình (BR-05) |
 | **Gia hạn / nhả lease, gửi `LEAD_ACTION`** | ❌ | ❌ | ✅ (lead) | Đúng `epoch` hiện hành (BR-03) |
-| **Xem Văn phòng ảo (SCR-08)** | ✅ | ❌ | ❌ | FEAT-02, chỉ khi bật |
+| **Xem Văn phòng ảo (SCR-08)** | ✅ | ✅ | ❌ | FEAT-02 bản 2, chỉ khi bật; partner xem đầy đủ (DEC-27) |
+| **Bật/tắt Văn phòng ảo (SCR-07)** | ✅ (owner) | ❌ | ❌ | FEAT-02 |
+| **Xem trạng thái đăng nhập agent** | ✅ mọi máy | ✅ máy của mình | ❌ | FEAT-06, SCR-05/SCR-11 |
+| **Yêu cầu kiểm lại đăng nhập (`auth-recheck`)** | ✅ mọi máy | ✅ máy của mình | ❌ | FEAT-06 |
+| **Báo trạng thái đăng nhập (`AGENT_AUTH`)** | ❌ | ❌ | ✅ | Chỉ agent thuộc máy mình (BR-05) |
 
 ---
 

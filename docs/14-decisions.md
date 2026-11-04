@@ -48,12 +48,12 @@
   - Server vẫn giao task code đã `READY` cho Antigravity; job `PLAN`/`REVIEW`/`REPLAN` nằm chờ trong hàng đợi.
   - Telegram báo Admin một lần khi vào và khi thoát chế độ trống lead, kèm giờ dự kiến (`MIN(cooldown_until)` của agent Claude).
   - Agent Claude đầu tiên trở lại `IDLE` tự nhận lease.
-  - Antigravity **không** bao giờ giữ vai lead — giữ nguyên Claude là QA độc lập.
+  - ~~Antigravity **không** bao giờ giữ vai lead — giữ nguyên Claude là QA độc lập.~~ → thay bởi DEC-29 (agent bất kỳ có `lead_eligible`; QA độc lập giữ bằng quy tắc không tự review).
 
 ## DEC-06: Chọn lead tự động, Admin được ghim/thu hồi trên SCR-05
 - **Ngày:** 2026-11-03 · **Tính năng:** FEAT-01 · **Trạng thái:** CHỐT
 - **Quyết định:**
-  - Thứ tự chọn lead kế nhiệm trong các agent Claude `IDLE` của máy `ONLINE`: `lead_priority` (Admin đặt, nhỏ hơn = ưu tiên hơn, NULL xếp cuối) → còn nhiều hạn mềm nhất → rảnh lâu nhất.
+  - Thứ tự chọn lead kế nhiệm trong các agent Claude `IDLE` của máy `ONLINE` *(→ agent bất kỳ `lead_eligible`, DEC-29)*: `lead_priority` (Admin đặt, nhỏ hơn = ưu tiên hơn, NULL xếp cuối) → còn nhiều hạn mềm nhất → rảnh lâu nhất.
   - Admin có nút "Trao vai lead" / "Thu hồi vai" ngay trên SCR-05 Fleet; không thêm màn hình mới.
   - Thao tác thủ công cũng tăng `epoch` như chuyển giao tự động.
 
@@ -62,7 +62,7 @@
 - **Bối cảnh:** Đã có văn phòng ảo pixel-art ở `namth/edusystem` nhánh `claude/office-simulation-gui-ca46c2`, thư mục `office/` — chỉ quan sát, 4 nhân vật cố định, toạ độ bàn viết cứng, nguồn là hook Claude + `handoff/tasks/*/state.json`.
 - **Quyết định:**
   - Port thành màn hình tuỳ chọn SCR-08 trong dashboard AgentHub, chỉ quan sát, không điều khiển.
-  - Bố cục sinh từ dữ liệu: mỗi máy một dãy bàn, mỗi agent một bàn; máy `OFFLINE` → cả dãy tắt đèn.
+  - ~~Bố cục sinh từ dữ liệu: mỗi máy một dãy bàn, mỗi agent một bàn; máy `OFFLINE` → cả dãy tắt đèn.~~ → thay bởi DEC-25 (chỗ ngồi cố định, hai cụm, mỗi agent một bàn; máy `OFFLINE` → hàng bàn tắt đèn).
   - "Ghế Trưởng phòng" là vị trí cố định — agent giữ `lead_lease` đi tới ngồi; chuyển giao lead = trao hồ sơ cho người kế nhiệm.
   - Agent `COOLDOWN` về phòng nghỉ kèm đồng hồ đếm ngược.
 - **Phương án loại:** đồ thị nút (mất cảm giác văn phòng); làm cả hai (gấp đôi công UI).
@@ -116,7 +116,7 @@
 
 ## DEC-17: Quản trị hệ thống = owner; vai trong dự án theo quyền trên từng repo
 - **Ngày:** 2026-11-04 · **Tính năng:** FEAT-04 · **Trạng thái:** CHỐT · Mở rộng DEC-09
-- **Quyết định:** Quản trị hệ thống (SCR-05 Cụm máy, SCR-08, SCR-07, SCR-09 Dự án, trao/thu hồi lead) chỉ dành cho tài khoản GitHub trùng `GITHUB_OWNER`. Mỗi dự án: vai `ADMIN`/`PARTNER` tra quyền collaborator trên đúng repo đó theo DEC-09, làm mới khi đăng nhập và khi thêm dự án, lưu `project_members`. Không là collaborator → không thấy dự án. Sidebar có ô chọn dự án; Kanban/Tạo yêu cầu theo dự án đang chọn; quản trị hệ thống có thêm "Tất cả dự án".
+- **Quyết định:** Quản trị hệ thống (SCR-05 Cụm máy, SCR-08 *(→ mở cho partner theo DEC-27)*, SCR-07, SCR-09 Dự án, trao/thu hồi lead) chỉ dành cho tài khoản GitHub trùng `GITHUB_OWNER`. Mỗi dự án: vai `ADMIN`/`PARTNER` tra quyền collaborator trên đúng repo đó theo DEC-09, làm mới khi đăng nhập và khi thêm dự án, lưu `project_members`. Không là collaborator → không thấy dự án. Sidebar có ô chọn dự án; Kanban/Tạo yêu cầu theo dự án đang chọn; quản trị hệ thống có thêm "Tất cả dự án".
 
 ## DEC-18: Thêm máy bằng mã tham gia một lần + script cài + khối hướng dẫn cho agent local
 - **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT
@@ -141,6 +141,52 @@
 ## DEC-21: Trang Đóng góp tính từ dữ liệu sẵn có
 - **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT
 - **Quyết định:** **SCR-10 Đóng góp** — lọc khoảng thời gian (7/30/90 ngày, tuỳ chọn), xem theo Partner (chủ máy) hoặc theo Dự án: số máy, job xong / lỗi / hết limit theo loại (SPEC/CODE/QA_REVIEW), task tạo và DONE, PR đã merge, giờ máy chạy việc (tổng `ended_at − started_at` của assignment). Bấm một dòng → dòng thời gian chi tiết (thời điểm, máy/agent, loại job, task, kết quả, attempt). Tính bằng truy vấn trên `assignments`, `jobs`, `tasks`, `workers` — không thêm bảng. Quản trị xem tất cả; partner chỉ xem phần của mình và các dự án mình là thành viên. Không ghi nhận token/chi phí (CLI không báo nhất quán).
+
+## DEC-22: Trạng thái đăng nhập là cột riêng `auth_status`, không thêm giá trị vào `status`
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-06 · **Trạng thái:** CHỐT
+- **Bối cảnh:** Máy iMac-8GB nối vào hiện IDLE dù agent có thể chưa đăng nhập; server không có khái niệm đăng nhập, dispatcher chỉ kiểm `status = 'IDLE'`.
+- **Quyết định:** Thêm `agents.auth_status OK | NEEDS_AUTH | UNKNOWN` (+ `auth_checked_at`, `auth_detail`) và `workers.gh_auth` cùng miền giá trị, độc lập với `status IDLE | BUSY | COOLDOWN` (giữ nguyên DEC-04). Nhận job/làm lead đòi `auth_status <> 'NEEDS_AUTH'` và `gh_auth <> 'NEEDS_AUTH'`; `UNKNOWN` vẫn được nhận.
+- **Phương án loại:** thêm `NEEDS_AUTH` vào `status` (phá DEC-04, chồng chéo với COOLDOWN).
+
+## DEC-23: Kiểm đăng nhập chủ động + phản ứng theo mẫu lỗi
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-06 · **Trạng thái:** CHỐT
+- **Quyết định:** Runner chạy `claude auth status`, `gh auth status` lúc bắt tay, 10 phút/lần khi rảnh, và trước `REQUEST_TASK` nếu lần kiểm cũ hơn 60 giây (timeout 15 giây → `UNKNOWN`). `agy` chưa có lệnh kiểm → `UNKNOWN`. Thêm `auth_patterns` (như `exhaust_patterns` của DEC-02): job lỗi khớp mẫu → `AGENT_AUTH NEEDS_AUTH` kèm `assignment_id`, job về hàng đợi, **không tăng `attempt`**. Chủ máy bấm "Đã đăng nhập, kiểm lại" → `AUTH_RECHECK`.
+- **Phương án loại:** chỉ chủ động (agy không bao giờ phát hiện được, job lỗi bị tính attempt); chỉ phản ứng (máy mới vẫn hiện IDLE tới job đầu tiên).
+
+## DEC-24: Hiển thị "Cần đăng nhập" trên web, văn phòng và Telegram
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-06, FEAT-02 · **Trạng thái:** CHỐT
+- **Quyết định:** SCR-05/SCR-11 nhãn đỏ + lệnh gợi ý + nút kiểm lại; SCR-08 nhân vật đứng cạnh bàn với 🔑; Telegram báo Admin một tin khi vào `NEEDS_AUTH`, một tin khi trở lại `OK`.
+
+## DEC-25: Văn phòng ảo bản 2 — chỗ ngồi cố định, hai cụm, lối đi giữa
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-02 · **Trạng thái:** CHỐT · **Thay phần bố cục của DEC-07** ("mỗi máy một dãy bàn")
+- **Quyết định:** Văn phòng hoàn chỉnh liên thông (tường, vách/cửa kính, bảng tin, cây xanh, sàn gỗ, phòng nghỉ, sảnh) theo phong cách bản tham khảo edusystem. Khu làm việc tối thiểu 8 bàn, **1 bàn = 1 agent**, hai cụm trái/phải, mỗi hàng 2 bàn (một máy 2 agent = một hàng), lối đi giữa; xếp máy theo tên trái-1 → phải-1 → trái-2 → …, quá 4 máy kéo dài xuống. Bàn Trưởng phòng phía trên hai cụm. Phòng nghỉ + sảnh ở đáy.
+- **Phương án loại:** 1 bàn = 1 máy (khó thấy agent nào làm gì).
+
+## DEC-26: Khu chỉ huy — mỗi tài khoản GitHub một bàn, xếp dọc, sáng khi online
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-02 · **Trạng thái:** CHỐT
+- **Quyết định:** Khu chỉ huy bên phải khu làm việc, ngăn bằng vách kính có cửa thông. Mỗi bản ghi `users` một bàn có biển tên. Thứ tự: owner đầu → partner online → partner vắng (ghế trống, vẫn có biển tên). Online = request web trong 5 phút (`users.last_seen_at`) hoặc đang mở SSE văn phòng. Hoạt cảnh duyệt task diễn ra tại bàn người duyệt.
+- **Phương án loại:** chỉ hiện người online (phòng thay đổi liên tục); ai cũng luôn ngồi (không phản ánh thực tế).
+
+## DEC-27: Partner được xem SCR-08 đầy đủ
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-02 · **Trạng thái:** CHỐT · **Sửa DEC-17** (SCR-08 không còn là màn hình chỉ owner)
+- **Quyết định:** Owner và partner mở SCR-08 với cùng nội dung, kể cả task của dự án partner không tham gia (người dùng chấp nhận rủi ro lộ thông tin giữa dự án). Công tắc bật/tắt vẫn chỉ owner. Luồng SSE chuyển sang `GET /api/office/stream` (đường `/api/admin/office/stream` trả `308`). Giới hạn SSE: 3 kết nối/người, 30 tổng (thay BR-23 cũ: 5 tổng).
+- **Phương án loại:** partner xem có lọc theo dự án (an toàn hơn, người dùng không chọn); giữ chỉ owner.
+
+## DEC-28: Logo INOVA trên tường sau, icon trên cửa kính và thảm sảnh
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-02 · **Trạng thái:** CHỐT
+- **Quyết định:** Logo đầy đủ (`web/public/brand/inova-logo.png`) trên ô tường tối phía trên bàn Trưởng phòng; icon chim (`web/public/brand/inova-icon.png`) trên cửa kính khu chỉ huy và thảm sảnh. Vẽ bằng lớp DOM phủ canvas để giữ nét; lỗi tải → chữ "INOVA".
+- **Phương án loại:** logo ở sảnh lễ tân đầu văn phòng (tốn thêm một dải chiều cao).
+
+## DEC-29: Trưởng phòng có thể là agent bất kỳ loại nếu được bật `lead_eligible`
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-01 (sửa đổi), FEAT-06 · **Trạng thái:** CHỐT · **Thay mục "Antigravity không bao giờ giữ vai lead" của DEC-05; thay cụm "agent Claude `IDLE`" ở DEC-06**
+- **Quyết định:** Ứng viên lead = agent bất kỳ `kind` có `lead_eligible = 1`, `IDLE`, `auth_status <> NEEDS_AUTH`, máy `ONLINE`; thứ tự giữ nguyên DEC-06 (`lead_priority` → hạn mềm → rảnh lâu nhất). Mặc định chỉ Claude trên máy owner bật; Admin bật cho agent khác trên SCR-05. Job `lead_only` giao cho người giữ lease bất kể `required_agent`. Giữ QA độc lập: `QA_REVIEW` không giao cho agent đã viết code của chính task đó. `VACANT` = không còn ứng viên nào.
+- **Phương án loại:** agy chỉ làm lead khi Admin bấm "Trao vai" thủ công.
+
+## DEC-30: Cấu hình Telegram giữ hoàn toàn trong `.env`
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-06 · **Trạng thái:** CHỐT
+- **Bối cảnh:** `docs/03` cũ ghi SCR-07 "cấu hình Telegram Bot Token, Chat ID" nhưng code chỉ đọc `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET` từ môi trường (`cmd/server/main.go`).
+- **Quyết định:** Giữ nguyên `.env`; SCR-07 chỉ hiện dòng chỉ đọc "Telegram: đang bật / tắt (cấu hình trong `.env`)" từ `GET /api/admin/settings.telegram_enabled`. Sửa `docs/03` cho khớp code.
+- **Phương án loại:** Chat ID + công tắc loại tin trên SCR-07; nhập cả token trên web (phải mã hoá secret trong DB).
 
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.

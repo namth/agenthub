@@ -1,0 +1,22 @@
+{
+  "id": "TASK-030",
+  "title": "Server: trạng thái đăng nhập agent (migration 004, AGENT_AUTH, guard, Telegram)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T16:18:12",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-030-agent-auth-server/verify.sh",
+    "internal/dispatcher/auth_test.go",
+    "internal/gateway/auth_test.go",
+    "internal/telegram/auth_test.go",
+    "internal/machines/auth_test.go",
+    "internal/api/fleet_auth_test.go",
+    "internal/database/migrate004_test.go"
+  ]
+}

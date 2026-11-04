@@ -30,7 +30,7 @@
 TC-11 → TC-27: xem [features/lead-rotation.md](features/lead-rotation.md) mục 8 (lease, fencing, trống lead, thu hồi 45s/120s, hạn mềm, giả mạo agent, RBAC, E2E SCR-05).
 
 ### 1.5 Văn phòng ảo (FEAT-02)
-TC-28 → TC-35: xem [features/virtual-office.md](features/virtual-office.md) mục 8 (chuyển sự kiện, che bí mật, RBAC, bật/tắt, nối lại SSE, bố cục động).
+TC-28 → TC-35: xem [features/virtual-office.md](features/virtual-office.md) mục 8 (chuyển sự kiện, che bí mật, RBAC, bật/tắt, nối lại SSE, bố cục động). Bản 2: xem mục 1.8.
 
 ---
 
@@ -82,3 +82,9 @@ Claude Code sẽ đánh giá PR dựa trên thang điểm 10 với checklist sau
 
 ### 1.6 Đa dự án & thêm máy (FEAT-04, FEAT-05)
 TC-36 → TC-56: xem [features/multi-project.md](features/multi-project.md) §8 và [features/join-machine.md](features/join-machine.md) §8.
+
+### 1.7 Trạng thái đăng nhập & lead mọi loại agent (FEAT-06)
+TC-57 → TC-67: xem [features/agent-auth.md](features/agent-auth.md) §8 (kiểm đăng nhập, guard dispatcher, đưa job về hàng đợi, lead mất đăng nhập, Telegram không trùng, RBAC kiểm lại, lead Antigravity, QA độc lập, migration 004, UI).
+
+### 1.8 Văn phòng ảo bản 2 (FEAT-02)
+TC-30, TC-33, TC-34 sửa nội dung; thêm TC-68 → TC-73: xem [features/virtual-office.md](features/virtual-office.md) §8 (khu chỉ huy, `last_seen_at`, giới hạn SSE, bố cục, 🔑, logo dự phòng).
