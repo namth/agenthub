@@ -1,0 +1,17 @@
+{
+  "id": "TASK-010",
+  "title": "Văn phòng ảo backend: event bus, SSE, bật/tắt (TASK-15, FEAT-02)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T08:54:47",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-010-office-sse/verify.sh",
+    "internal/office/office_test.go"
+  ]
+}
