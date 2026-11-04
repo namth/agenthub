@@ -1,0 +1,17 @@
+{
+  "id": "TASK-006",
+  "title": "REST API Fleet & quản trị trưởng phòng (GET /api/fleet, trao/thu hồi lead, sửa agent)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T08:39:14",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-006-fleet-api/verify.sh",
+    "internal/api/fleet_test.go"
+  ]
+}
