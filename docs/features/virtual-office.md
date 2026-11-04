@@ -1,6 +1,6 @@
 # FEAT-02: Văn phòng ảo (Sơ đồ phối hợp trực quan)
 
-> Trạng thái: **Bản 2 — SPEC_APPROVED (2026-11-04)** · Bản 1 DONE (2026-11-04).
+> Trạng thái: **Bản 2 — DONE (2026-11-04)** · Bản 1 DONE (2026-11-04).
 > Quyết định: DEC-07 (phần bố cục thay bởi DEC-25), DEC-08, DEC-24, DEC-25, DEC-26, DEC-27, DEC-28 (`docs/14-decisions.md`).
 > Nguồn tham khảo phong cách: `namth/edusystem`, nhánh `claude/office-simulation-gui-ca46c2`, thư mục `office/` — bản chép ở `web/src/office/legacy/` (sàn gỗ, tường, vách kính, bảng công việc, cây xanh, đồng hồ).
 

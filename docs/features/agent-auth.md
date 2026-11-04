@@ -1,6 +1,6 @@
 # FEAT-06: Trạng thái đăng nhập của agent & trưởng phòng mọi loại agent
 
-> Trạng thái: SPEC_APPROVED (2026-11-04) · Quyết định: DEC-22, DEC-23, DEC-24, DEC-29, DEC-30
+> Trạng thái: DONE (2026-11-04) · Quyết định: DEC-22, DEC-23, DEC-24, DEC-29, DEC-30
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
