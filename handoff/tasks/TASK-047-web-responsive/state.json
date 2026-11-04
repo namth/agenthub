@@ -1,7 +1,7 @@
 {
   "id": "TASK-047",
   "title": "Web dùng được trên điện thoại 375px",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "5dd1e35a-5efa-4ad1-ae5c-be534585a942",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T21:43:37",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T21:45:20",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
