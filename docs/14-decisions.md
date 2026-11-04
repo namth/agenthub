@@ -82,6 +82,11 @@
 - **Quyết định:** Runner daemon là lệnh con `agenthub runner --server <url> --token <token>` trong cùng binary; code ở `internal/runner/`. Bỏ phương án `runner/runner.py`.
 - **Lý do:** cài máy con chỉ cần chép 1 file; dùng chung kiểu bản tin với gateway; test chung bộ Go; đúng tinh thần single binary (DEC/docs 05 §2).
 
+## DEC-11: Ánh xạ 8 trạng thái task sang 5 cột Kanban
+- **Ngày:** 2026-11-04 · **Trạng thái:** CHỐT
+- **Quyết định:** `backlog` = PENDING_APPROVAL · `planning` = PLANNING, READY · `in_progress` = IN_PROGRESS · `review` = WAITING_QA, QA_PASSED · `done` = DONE. Task `REJECTED` không hiện trên Kanban (xem ở chi tiết/lọc).
+- **Kèm theo:** Partner chỉ thấy task gốc (`parent_id IS NULL`), không có `branch_name`, `assigned_worker_id`. Tra quyền collaborator bằng token server, OAuth người dùng chỉ xin `read:user`.
+
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.
 - **FEAT-04 Đa dự án song song:** GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.
