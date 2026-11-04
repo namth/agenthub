@@ -1,7 +1,7 @@
 {
   "id": "TASK-039",
   "title": "API làm rõ: clarify, tự quyết, /answer GitHub, nút Telegram",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "3a967e00-47c5-4766-9c42-c95f86acbee3",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T22:14:04",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:16:26",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
