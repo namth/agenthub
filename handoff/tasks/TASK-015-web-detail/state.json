@@ -1,0 +1,20 @@
+{
+  "id": "TASK-015",
+  "title": "Giao diện SCR-04 Chi tiết task, SCR-07 Cài đặt (công tắc văn phòng ảo)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:24:23",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-015-web-detail/verify.sh",
+    "web/src/pages/detail.test.tsx",
+    "web/src/pages/screens.test.tsx",
+    "web/src/office/office.test.tsx",
+    "web/src/nav.test.ts"
+  ]
+}
