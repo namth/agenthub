@@ -1,18 +1,39 @@
 {
   "id": "TASK-011",
   "title": "Tách tasks.Service (Create/Approve/Reject) dùng chung cho HTTP và Telegram, hook OnCreated",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "176517b7-b891-40a7-845a-5c56182d9d34",
   "history": [
     {
       "at": "2026-11-04T09:00:51",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T09:01:26",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T09:01:45",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:07:36",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:08:32",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-011-tasks-service/verify.sh",
     "internal/tasks/tasks_test.go",
     "internal/tasks/service_test.go"
-  ]
+  ],
+  "via": "agy"
 }
