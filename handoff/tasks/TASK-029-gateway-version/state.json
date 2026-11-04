@@ -1,0 +1,17 @@
+{
+  "id": "TASK-029",
+  "title": "Gateway: trao đổi phiên bản trong handshake, CloseWorker",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T14:22:52",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-029-gateway-version/verify.sh",
+    "internal/gateway/version_test.go"
+  ]
+}

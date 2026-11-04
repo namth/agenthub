@@ -1,0 +1,2 @@
+c540a0cf2c9a275fcd759a48bb53d46e162bb80ad63bcd3f0b1f73a0430dcbdc  handoff/tasks/TASK-029-gateway-version/verify.sh
+1070ed93f79af1924cd3e31e07c8468a8f092fad32682c501d40824d57dab903  internal/gateway/version_test.go
