@@ -336,6 +336,7 @@ func main() {
 				_ = disp.Disconnect(workerID)
 			}
 		},
+		Recheck: hub.SendAuthRecheck,
 	}, func(r *http.Request) (string, bool) {
 		u, ok := auth.UserFrom(r.Context())
 		return u.ID, ok

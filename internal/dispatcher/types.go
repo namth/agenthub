@@ -19,6 +19,7 @@ var (
 	ErrAgentNotEligible = errors.New("AGENT_NOT_ELIGIBLE") // BR-06 (Admin trao vai)
 	ErrNoLead           = errors.New("NO_LEAD")            // Admin thu hồi khi VACANT
 	ErrNotFound         = errors.New("NOT_FOUND")
+	ErrInvalidAuth      = errors.New("VALIDATION_ERROR")
 )
 
 // Clock cho phép test dùng đồng hồ giả.
@@ -68,7 +69,20 @@ const (
 	RevokeOffline   = "OFFLINE"
 	RevokeAdmin     = "ADMIN"
 	RevokeReleased  = "RELEASED"
+	RevokeAuth      = "AUTH"
 )
+
+const (
+	AuthOK      = "OK"
+	AuthNeeds   = "NEEDS_AUTH"
+	AuthUnknown = "UNKNOWN"
+)
+
+type AgentHello struct {
+	Kind       string
+	AuthStatus string
+	AuthDetail string
+}
 
 type Agent struct {
 	ID            string // "<worker_id>/<kind thường>", vd "mac-mini/claude"
@@ -76,6 +90,7 @@ type Agent struct {
 	Kind          string
 	Status        string // IDLE | BUSY | COOLDOWN
 	CooldownUntil *time.Time
+	AuthStatus    string
 }
 
 type NewJob struct {
@@ -109,16 +124,19 @@ type Lease struct {
 
 // Event là sự kiện miền dispatcher phát ra cho gateway / Telegram / văn phòng ảo.
 type Event struct {
-	Type         string // xem hằng Ev* bên dưới
-	At           time.Time
-	WorkerID     string
-	AgentID      string
-	JobID        string
-	TaskID       string
-	AssignmentID string
-	Epoch        int64
-	Reason       string
-	Until        *time.Time // COOLDOWN tới / giờ dự kiến hết VACANT
+	Type           string // xem hằng Ev* bên dưới
+	At             time.Time
+	WorkerID       string
+	AgentID        string
+	JobID          string
+	TaskID         string
+	AssignmentID   string
+	Epoch          int64
+	Reason         string
+	Until          *time.Time // COOLDOWN tới / giờ dự kiến hết VACANT
+	AuthStatus     string
+	PrevAuthStatus string
+	Detail         string
 }
 
 const (
@@ -136,10 +154,20 @@ const (
 	EvJobAvailable  = "JOB_AVAILABLE"  // có job mới có thể giao
 	EvJobAssigned   = "JOB_ASSIGNED"   // AgentID, AssignmentID, JobID, TaskID, Reason = job kind (văn phòng ảo)
 	EvJobSubmitted  = "JOB_SUBMITTED"  // AgentID, AssignmentID, JobID
+	EvAgentAuth     = "AGENT_AUTH"
+	EvWorkerAuth    = "WORKER_AUTH"
 )
 
 // Notifier nhận sự kiện; cài đặt không được chặn lâu (gateway tự đệm).
 type Notifier interface{ Notify(Event) }
+
+// AuthAPI là interface tuỳ chọn cho tính năng đăng nhập agent (FEAT-06).
+type AuthAPI interface {
+	ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]Agent, error) // ghAuth "" = giữ cũ
+	SetAuth(workerID, agentID, status, detail string) error
+	SetGhAuth(workerID, status, detail string) error
+	AuthRequired(workerID, agentID, assignmentID, detail, handoffNote, wipCommit string) error
+}
 
 // API là toàn bộ thao tác dispatcher cung cấp. Mọi thời điểm lấy từ Clock.
 type API interface {
