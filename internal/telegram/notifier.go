@@ -246,3 +246,63 @@ func (n *Notifier) NotifyQAPassed(taskID, title, prURL string) {
 		buttons: buttons,
 	})
 }
+
+// ClarifyQ mô tả một câu hỏi làm rõ cần gửi tới Telegram.
+type ClarifyQ struct {
+	ID          string
+	Question    string
+	Options     []string
+	Recommended string
+}
+
+// NotifyClarifyQuestions gửi danh sách câu hỏi làm rõ của một vòng tới admin Telegram.
+func (n *Notifier) NotifyClarifyQuestions(taskID, title string, round int, qs []ClarifyQ) {
+	if n == nil {
+		return
+	}
+	for _, q := range qs {
+		text := fmt.Sprintf("❓ %s — vòng %d\n\n%s", title, round, q.Question)
+		var buttons [][]Button
+		if len(q.Options) > 0 {
+			for idx, opt := range q.Options {
+				label := opt
+				if opt == q.Recommended {
+					label += " (Đề xuất)"
+				}
+				cb := fmt.Sprintf("clarify:%s:%d:%s:%d", taskID, round, q.ID, idx)
+				buttons = append(buttons, []Button{{Text: label, CallbackData: cb}})
+			}
+		} else {
+			text += "\n\n(Trả lời trên web hoặc GitHub)"
+		}
+		n.enqueue(notifyItem{
+			chatID:  n.adminChatID,
+			text:    text,
+			buttons: buttons,
+		})
+	}
+}
+
+// NotifyClarifyReminder gửi thông báo nhắc nhở làm rõ khi chưa được trả lời sau 24h hoặc 72h.
+func (n *Notifier) NotifyClarifyReminder(taskID, title string, hours int) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⏰ NHẮC LÀM RÕ (%dh)\nTask: %s\nChưa có câu trả lời sau %d giờ.", hours, title, hours)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}
+
+// NotifyClarifyCapped gửi thông báo khi task đã hết lượt hỏi làm rõ (vượt quá 3 vòng).
+func (n *Notifier) NotifyClarifyCapped(taskID, title string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("🛑 HẾT LƯỢT LÀM RÕ (3 vòng)\nTask: %s\nĐã chuyển về lập lại kế hoạch (REPLAN).", title)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}

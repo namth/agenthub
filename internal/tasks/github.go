@@ -16,6 +16,11 @@ type GitHub interface {
 	CloseIssue(ctx context.Context, number int, comment string) error
 }
 
+// Commenter là interface tạo comment trên GitHub issue.
+type Commenter interface {
+	CommentIssue(ctx context.Context, number int, body string) error
+}
+
 type ghClient struct {
 	apiURL string
 	owner  string
@@ -121,32 +126,39 @@ func (c *ghClient) SetLabels(ctx context.Context, number int, labels []string) e
 	return nil
 }
 
+func (c *ghClient) CommentIssue(ctx context.Context, number int, body string) error {
+	commentBody := map[string]any{
+		"body": body,
+	}
+	b, err := json.Marshal(commentBody)
+	if err != nil {
+		return err
+	}
+	u := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.apiURL, c.owner, c.repo, number)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("github comment error: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (c *ghClient) CloseIssue(ctx context.Context, number int, comment string) error {
 	if comment != "" {
-		commentBody := map[string]any{
-			"body": comment,
-		}
-		b, err := json.Marshal(commentBody)
-		if err != nil {
+		if err := c.CommentIssue(ctx, number, comment); err != nil {
 			return err
-		}
-		u := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.apiURL, c.owner, c.repo, number)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(b))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("Content-Type", "application/json")
-		if c.token != "" {
-			req.Header.Set("Authorization", "Bearer "+c.token)
-		}
-		resp, err := c.hc.Do(req)
-		if err != nil {
-			return err
-		}
-		resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("github comment error: status %d", resp.StatusCode)
 		}
 	}
 
