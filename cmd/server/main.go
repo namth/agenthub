@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"errors"
 	"log"
 	"net/http"
@@ -11,11 +14,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/namth/agenthub/internal/api"
+	"github.com/namth/agenthub/internal/auth"
 	"github.com/namth/agenthub/internal/database"
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
 	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
+	"github.com/namth/agenthub/internal/tasks"
 	"github.com/namth/agenthub/web"
 )
 
@@ -49,6 +55,29 @@ func configFromEnv() dispatcher.Config {
 	return c
 }
 
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("crypto/rand: %v", err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// ensureProject đảm bảo có bản ghi projects cho repo đang cấu hình, trả về id.
+func ensureProject(db *sql.DB, owner, repo string) (string, error) {
+	full := owner + "/" + repo
+	if owner == "" || repo == "" {
+		full = "local/agenthub"
+	}
+	var id string
+	err := db.QueryRow(`SELECT id FROM projects WHERE github_repo = ?`, full).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		id = randomHex(16)
+		_, err = db.Exec(`INSERT INTO projects (id, name, github_repo) VALUES (?, ?, ?)`, id, repo, full)
+	}
+	return id, err
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "runner" {
 		os.Exit(runner.Main(os.Args[2:]))
@@ -79,7 +108,52 @@ func main() {
 	hub = gateway.New(disp, gateway.DBAuthenticator(db))
 	defer hub.Close()
 
-	mounts := []server.Mount{{Pattern: "/ws/agent", Handler: hub}}
+	owner, repo := os.Getenv("GITHUB_REPO_OWNER"), os.Getenv("GITHUB_REPO_NAME")
+	projectID, err := ensureProject(db, owner, repo)
+	if err != nil {
+		log.Fatalf("project: %v", err)
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Println("JWT_SECRET ngắn hơn 32 ký tự: dùng khoá ngẫu nhiên tạm, phiên mất khi khởi động lại")
+		jwtSecret = randomHex(32)
+	}
+	authSvc := auth.New(db, auth.Config{
+		ClientID:     os.Getenv("GITHUB_CLIENT_ID"),
+		ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+		BaseURL:      os.Getenv("BASE_URL"),
+		JWTSecret:    jwtSecret,
+		RepoOwner:    owner,
+		RepoName:     repo,
+		ServerToken:  os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"),
+	})
+	roleOf := func(r *http.Request) (string, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.Role, ok
+	}
+	userOf := func(r *http.Request) (string, string, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.ID, u.Role, ok
+	}
+	gh := tasks.NewGitHubClient("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
+	fleetAPI := api.FleetHandler(db, disp, roleOf)
+	tasksAPI := tasks.Handler(db, gh, disp, projectID, userOf)
+
+	mounts := []server.Mount{
+		{Pattern: "/ws/agent", Handler: hub},
+		{Pattern: "/api/auth/*", Handler: authSvc.Routes()},
+		{Pattern: "/api/fleet", Handler: fleetAPI},
+		{Pattern: "/api/admin/lead/*", Handler: fleetAPI},
+		{Pattern: "/api/admin/agents/*", Handler: fleetAPI},
+		{Pattern: "/api/tasks", Handler: tasksAPI},
+		{Pattern: "/api/tasks/*", Handler: tasksAPI},
+	}
+	if secret := os.Getenv("GITHUB_WEBHOOK_SECRET"); secret != "" {
+		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: tasks.WebhookHandler(db, secret, projectID)})
+	} else {
+		log.Println("GITHUB_WEBHOOK_SECRET trống: tắt webhook GitHub")
+	}
 	if key := os.Getenv("RUNNER_REGISTRATION_KEY"); key != "" {
 		mounts = append(mounts, server.Mount{Pattern: "/api/fleet/register", Handler: gateway.RegisterHandler(db, key)})
 	} else {
@@ -88,7 +162,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: server.New(db, web.Static(), mounts...),
+		Handler: authSvc.Middleware(server.New(db, web.Static(), mounts...)),
 	}
 
 	ctx, stopTick := context.WithCancel(context.Background())
