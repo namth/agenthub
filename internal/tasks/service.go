@@ -47,6 +47,12 @@ func WithOnCreated(fn func(Created)) Option {
 	}
 }
 
+func WithOnApproved(fn func(taskID, userID string)) Option {
+	return func(s *Service) {
+		s.onApproved = fn
+	}
+}
+
 func WithMerger(m Merger) Option {
 	return func(s *Service) {
 		s.merger = m
@@ -78,13 +84,14 @@ func WithMergerFor(fn func(projectID string) Merger) Option {
 }
 
 type Service struct {
-	db        *sql.DB
-	gh        GitHub
-	disp      dispatcher.API
-	projectID string
-	onCreated func(Created)
-	merger    Merger
-	onMerged  func(string)
+	db         *sql.DB
+	gh         GitHub
+	disp       dispatcher.API
+	projectID  string
+	onCreated  func(Created)
+	onApproved func(taskID, userID string)
+	merger     Merger
+	onMerged   func(string)
 
 	isMulti   bool
 	ghFor     func(projectID string) (GitHub, error)

@@ -221,6 +221,10 @@ func handleApprove(s *Service, authz Authz) http.HandlerFunc {
 			return
 		}
 
+		if s.onApproved != nil {
+			s.onApproved(taskID, userID)
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":     taskID,
 			"status": "PLANNING",
