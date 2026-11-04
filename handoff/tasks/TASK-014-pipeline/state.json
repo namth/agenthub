@@ -1,0 +1,20 @@
+{
+  "id": "TASK-014",
+  "title": "Pipeline: prompt cho agent, chuyển trạng thái task theo kết quả job (DEC-12)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:14:53",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-014-pipeline/verify.sh",
+    "internal/pipeline/pipeline_test.go",
+    "internal/gateway/hooks_test.go",
+    "internal/gateway/gateway_test.go",
+    "internal/gateway/register_test.go"
+  ]
+}
