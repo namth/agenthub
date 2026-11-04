@@ -20,6 +20,7 @@ import (
 	"github.com/namth/agenthub/internal/database"
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
+	"github.com/namth/agenthub/internal/logs"
 	"github.com/namth/agenthub/internal/office"
 	"github.com/namth/agenthub/internal/pipeline"
 	"github.com/namth/agenthub/internal/runner"
@@ -214,7 +215,13 @@ func main() {
 		}
 	}))
 	pl = pipeline.New(db, disp, gh, projectID)
+	logStore := logs.NewStore(db, time.Now, 5000)
 	hub = gateway.New(disp, gateway.DBAuthenticator(db),
+		gateway.WithLogSink(func(workerID, assignmentID, chunk string) {
+			if err := logStore.Append(workerID, assignmentID, chunk); err != nil {
+				log.Printf("logs: %v", err)
+			}
+		}),
 		gateway.WithPrompt(pl.PromptFor),
 		gateway.WithSubmitHook(func(workerID, assignmentID, prURL string, result json.RawMessage) {
 			if err := pl.OnSubmitted(context.Background(), workerID, assignmentID, prURL, result); err != nil {
@@ -265,6 +272,7 @@ func main() {
 		{Pattern: "/api/tasks/*", Handler: tasksAPI},
 		{Pattern: "/api/admin/settings", Handler: officeAPI},
 		{Pattern: "/api/admin/office/*", Handler: officeAPI},
+		{Pattern: "/api/admin/workers/*", Handler: logs.Handler(db, logStore, roleOf)},
 	}
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" && tgSender != nil {
 		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandler(tgSender, tasksSvc, tgChat, secret)})
