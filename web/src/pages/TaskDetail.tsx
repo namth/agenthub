@@ -130,6 +130,20 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
     }
   };
 
+  const handleMerge = async () => {
+    if (!id || acting || !window.confirm('Merge PR của task này vào main?')) return;
+    setActing(true);
+    setActionError(null);
+    try {
+      await api.post(`/api/tasks/${id}/merge`);
+      await fetchTask();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Không thể merge PR');
+    } finally {
+      setActing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -163,6 +177,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
   }
 
   const canApproveOrReject = role === 'ADMIN' && task.status === 'PENDING_APPROVAL';
+  const canMerge = role === 'ADMIN' && task.status === 'QA_PASSED' && !!task.pr_url;
 
   return (
     <div className="space-y-6">
@@ -202,6 +217,17 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
               Từ chối
             </button>
           </div>
+        )}
+
+        {canMerge && (
+          <button
+            type="button"
+            onClick={handleMerge}
+            disabled={acting}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800 disabled:opacity-50"
+          >
+            Merge vào main
+          </button>
         )}
       </div>
 
