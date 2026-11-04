@@ -1,7 +1,7 @@
 {
   "id": "TASK-042",
   "title": "Runner: kiểm đăng nhập bằng lời gọi thật + mẫu lỗi OAuth",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "de3518e3-4e6c-4cec-bfce-a5b0ad0564e2",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T21:49:42",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T21:51:09",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
