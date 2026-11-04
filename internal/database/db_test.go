@@ -84,7 +84,8 @@ func TestOpenCreatesFileAndAllTables(t *testing.T) {
 		t.Fatalf("không tạo file DB ở %s: %v", path, err)
 	}
 	got := names(t, db, `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
-	want := []string{"agent_projects", "agents", "assignments", "jobs", "join_codes", "lead_journal", "lead_lease", "project_members", "projects", "schema_migrations", "settings", "task_logs", "tasks", "users", "workers"}
+	// Danh sách cập nhật theo migration 005 (TASK-036): thêm lead_proposals, personal_tokens, smoke_runs, task_clarifications.
+	want := []string{"agent_projects", "agents", "assignments", "jobs", "join_codes", "lead_journal", "lead_lease", "lead_proposals", "personal_tokens", "project_members", "projects", "schema_migrations", "settings", "smoke_runs", "task_clarifications", "task_logs", "tasks", "users", "workers"}
 	if len(got) != len(want) {
 		t.Fatalf("bảng = %v, muốn đúng %v", got, want)
 	}
