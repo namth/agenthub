@@ -108,6 +108,8 @@ CREATE INDEX idx_jobs_project_status ON jobs(project_id, status);
 | Task | Nội dung | DoD |
 | :--- | :--- | :--- |
 | **TASK-019** | Cơ chế migration + `002_multi_project.sql` | TC-36, TC-37; mọi test cũ xanh |
-| **TASK-020** | Backend dự án: API dự án, GitHub repo list + webhook, `project_members`, tasks/pipeline/webhook theo dự án, dispatcher DEC-16 + `agent_projects` | TC-38 → TC-43, TC-45 |
+| **TASK-020** | Package `internal/projects`: liệt kê repo, thêm dự án + webhook, `project_members`, API dự án; auth chế độ đa dự án | TC-38 (API), TC-39 |
+| **TASK-026** | Tasks / pipeline / webhook GitHub theo dự án (GitHub client theo repo của task, vai theo dự án) | TC-38, TC-40, TC-45 |
+| **TASK-027** | Dispatcher: chia lượt theo weight, `max_parallel`, `agent_projects`, máy tạm dừng, `lead_eligible` | TC-41 → TC-43, TC-51, TC-53 |
 | **TASK-021** | Runner đa repo (`payload.repo`, clone cache, bỏ `--repo`) | TC-44; test runner cũ xanh |
 | **TASK-022** | UI: ô chọn dự án, SCR-09, Kanban/Tạo yêu cầu theo dự án, gán dự án cho agent | vitest + typecheck + build |
