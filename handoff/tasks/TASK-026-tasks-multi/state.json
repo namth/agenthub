@@ -1,0 +1,52 @@
+{
+  "id": "TASK-026",
+  "title": "Tasks, pipeline, webhook, gateway theo dự án",
+  "status": "accepted",
+  "conversation_id": "a99fd6cd-7660-427d-844f-f285b7661bf4",
+  "history": [
+    {
+      "at": "2026-11-04T12:07:27",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T12:09:05",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T12:09:26",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:20:18",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T14:12:43",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-026-tasks-multi/verify.sh",
+    "internal/e2e/flow_test.go",
+    "internal/e2e/merge_rollup_test.go",
+    "internal/gateway/gateway_test.go",
+    "internal/gateway/hooks_test.go",
+    "internal/gateway/logsink_test.go",
+    "internal/gateway/register_test.go",
+    "internal/gateway/repo_test.go",
+    "internal/pipeline/ci_test.go",
+    "internal/pipeline/multi_test.go",
+    "internal/pipeline/pipeline_test.go",
+    "internal/pipeline/reconcile_test.go",
+    "internal/tasks/merge_test.go",
+    "internal/tasks/multi_test.go",
+    "internal/tasks/service_test.go",
+    "internal/tasks/tasks_test.go"
+  ],
+  "via": "agy"
+}

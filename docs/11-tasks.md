@@ -78,6 +78,22 @@
   - **Mô tả:** Tin đổi lead, vào/thoát trống lead, task vượt `MAX_ATTEMPTS`.
   - **DoD:** Test với Telegram API giả: đúng nội dung, không gửi trùng (TC-17).
 
+### Đợt FEAT-06 + FEAT-02 bản 2 (đặc tả và xong 2026-11-04)
+- [x] **TASK-030: Server — migration 004, `AGENT_AUTH`/`AUTH_RECHECK`, guard dispatcher, Telegram (FEAT-06)**
+  - **DoD:** `go test ./internal/...` qua TC-58, TC-60 → TC-63, TC-66. Chi tiết: [features/agent-auth.md](features/agent-auth.md) §9.
+- [x] **TASK-031: Runner — kiểm đăng nhập, `auth_patterns`, trả lời `AUTH_RECHECK` (FEAT-06)**
+  - **DoD:** `go test ./internal/runner/...` qua TC-57, TC-59.
+- [x] **TASK-032: Dispatcher — trưởng phòng mọi loại agent (DEC-29)**
+  - **DoD:** `go test ./internal/dispatcher/...` qua TC-64, TC-65; TC-11 → TC-22 vẫn xanh.
+- [x] **TASK-034: Web — huy hiệu đăng nhập SCR-05/SCR-11, công tắc lead mọi agent, dòng Telegram SCR-07 (FEAT-06)**
+  - **DoD:** TC-67; `cd web && npm run typecheck && npm run build`.
+- [x] **TASK-033: Office server bản 2 — `users`/presence/auth trong snapshot, `last_seen_at`, quyền partner, giới hạn SSE (FEAT-02)**
+  - **DoD:** `go test ./internal/office/... ./internal/tasks/...` qua TC-28 → TC-32, TC-68 → TC-70. Chi tiết: [features/virtual-office.md](features/virtual-office.md) §9.
+- [x] **TASK-035: Office UI bản 2 — bố cục hai cụm + khu chỉ huy, nội thất, logo INOVA (FEAT-02)**
+  - **DoD:** `cd web && npx vitest run src/office` qua TC-33 → TC-35, TC-71 → TC-73; typecheck + build; ảnh chụp 0/3/9 máy.
+
+**Thứ tự:** TASK-030 → (TASK-031 ∥ TASK-032 ∥ TASK-033) → (TASK-034 ∥ TASK-035). Phạm vi file không chồng nhau: 031 `internal/runner`, 032 `internal/dispatcher` (phần chọn lead/giao job lead), 033 `internal/office` + hook duyệt trong `internal/tasks`, 034 `web/src/pages/Fleet.tsx|MyMachines.tsx|Settings.tsx`, 035 `web/src/office/*` + `web/src/pages/Office.tsx` + `web/src/nav.ts`. TASK-030 chạm `internal/dispatcher` (guard BR-37) nên phải xong trước TASK-032.
+
 ---
 
 ## 3. BACKLOG TÍNH NĂNG (chưa grill — xem `docs/14-decisions.md` mục BACKLOG)
@@ -107,7 +123,10 @@
 | TASK-016 | TASK-07 (backend log) | accepted |
 | TASK-017 | TASK-07 (SCR-06) | accepted |
 | TASK-018 | TASK-09 (Chốt chặn CI, Merge → DONE) | accepted |
+| TASK-030 → TASK-035 | FEAT-06 + FEAT-02 bản 2 (030/031/032/033 máy chính, 034/035 macbook) | accepted |
 
 **Trưởng phòng tự làm (ngoài handoff):** nối dây `cmd/server/main.go`; sự kiện `JOB_ASSIGNED/SUBMITTED`; giết cả nhóm tiến trình khi huỷ CLI; `Reconcile` bù job còn thiếu (30 giây/lần); nút Merge trên SCR-04; sửa route `/office`; test trọn dây chuyền `internal/e2e`.
+
+**Đợt FEAT-04/05 (2026-11-04):** TASK-019 migration + schema (xong) → TASK-020 dự án ∥ TASK-027 dispatcher ∥ TASK-021 runner đa repo ∥ TASK-023 thêm máy → TASK-026 tasks/pipeline theo dự án → TASK-022 UI dự án ∥ TASK-024 UI máy ∥ TASK-025 Đóng góp ∥ TASK-028 API bổ sung cho UI (fleet chủ máy/phiên bản/`lead_eligible`/dự án agent, `open_tasks`, tạo lại webhook) ∥ TASK-029 gateway phiên bản + `CloseWorker` → nối `cmd/server` + `deploy/build.sh`. DoD ở [features/multi-project.md](features/multi-project.md) §9, [features/join-machine.md](features/join-machine.md) §9.
 
 **Còn lại (nhỏ):** nhãn chữ trên canvas văn phòng ảo bị cắt, dãy bàn chưa ghi tên máy; Telegram chưa có nút Merge (chỉ web); chưa có dữ liệu thật trên GitHub/Telegram để chạy thử ngoài môi trường test.

@@ -108,6 +108,14 @@ sequenceDiagram
 
 Chi tiết sơ đồ ở [features/lead-rotation.md](features/lead-rotation.md) mục 3. Tóm tắt:
 1. **Agent hết limit giữa job:** Runner commit WIP + push nhánh, sinh `handoff_note`, gửi `AGENT_EXHAUSTED` → agent `COOLDOWN`; job về hàng đợi (`attempt + 1`); agent `IDLE` khác nhận, checkout cùng nhánh, làm tiếp.
-2. **Lead hết limit / mất kết nối / hết hạn lease:** Server tăng `epoch`, trao lease cho agent Claude `IDLE` kế tiếp (BR-06), ghi `lead_journal`, báo Telegram. Lead cũ gửi lệnh với `epoch` cũ bị từ chối.
-3. **Không còn Claude:** chế độ trống lead — job code vẫn chạy, việc trí tuệ chờ; Claude đầu tiên hết cooldown tự nhận lease.
+2. **Lead hết limit / mất kết nối / hết hạn lease / mất đăng nhập (BR-40):** Server tăng `epoch`, trao lease cho agent `lead_eligible` (mặc định Claude, DEC-29) `IDLE` kế tiếp (BR-06), ghi `lead_journal`, báo Telegram. Lead cũ gửi lệnh với `epoch` cũ bị từ chối.
+3. **Không còn ứng viên lead:** chế độ trống lead — job code vẫn chạy, việc trí tuệ chờ; ứng viên đầu tiên hết cooldown tự nhận lease.
 4. **Admin can thiệp:** trao/thu hồi vai trên SCR-05.
+
+## 6. LUỒNG 6: AGENT CHƯA ĐĂNG NHẬP (FEAT-06)
+
+Chi tiết ở [features/agent-auth.md](features/agent-auth.md) mục 3. Tóm tắt:
+1. Runner kiểm `claude auth status` / `gh auth status` lúc bắt tay và định kỳ → báo `auth_status`; agy luôn `UNKNOWN`.
+2. `NEEDS_AUTH` → agent không nhận việc, nhãn "Cần đăng nhập" trên SCR-05/SCR-11, 🔑 trong văn phòng, Telegram báo Admin.
+3. Chủ máy chạy lệnh đăng nhập trên máy đó → bấm "Đã đăng nhập, kiểm lại" → runner kiểm ngay → `OK`, Telegram báo đã khôi phục.
+4. Job đang chạy lỗi vì mất đăng nhập → job về hàng đợi, không tăng `attempt` (BR-39).

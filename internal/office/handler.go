@@ -16,8 +16,12 @@ import (
 
 // Options chứa cấu hình cho HTTP handler của văn phòng ảo.
 type Options struct {
-	PingEvery  time.Duration
-	MaxStreams int
+	PingEvery       time.Duration
+	MaxStreams      int
+	MaxPerUser      int
+	User            func(*http.Request) (userID string, ok bool)
+	Presence        *Presence
+	TelegramEnabled bool
 }
 
 type apiResponse struct {
@@ -54,15 +58,16 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 }
 
 type officeServer struct {
-	db       *sql.DB
-	bus      *Bus
-	snapshot func() (any, error)
-	authz    func(*http.Request) (string, bool)
-	opt      Options
-	mu       sync.Mutex
-	active   int
-	closers  map[int]chan struct{}
-	nextID   int
+	db          *sql.DB
+	bus         *Bus
+	snapshot    func() (any, error)
+	authz       func(*http.Request) (string, bool)
+	opt         Options
+	mu          sync.Mutex
+	active      int
+	userStreams map[string]int
+	closers     map[int]chan struct{}
+	nextID      int
 }
 
 // Handler trả về http.Handler phục vụ các endpoint cài đặt và SSE của văn phòng ảo.
@@ -77,22 +82,28 @@ func Handler(
 		opt.PingEvery = 20 * time.Second
 	}
 	if opt.MaxStreams <= 0 {
-		opt.MaxStreams = 5
+		opt.MaxStreams = 30
+	}
+	if opt.MaxPerUser <= 0 {
+		opt.MaxPerUser = 3
 	}
 
 	s := &officeServer{
-		db:       db,
-		bus:      b,
-		snapshot: snapshot,
-		authz:    authz,
-		opt:      opt,
-		closers:  make(map[int]chan struct{}),
+		db:          db,
+		bus:         b,
+		snapshot:    snapshot,
+		authz:       authz,
+		opt:         opt,
+		closers:     make(map[int]chan struct{}),
+		userStreams: make(map[string]int),
 	}
 
 	r := chi.NewRouter()
 	r.Get("/api/admin/settings", s.getSettings)
 	r.Patch("/api/admin/settings", s.patchSettings)
-	r.Get("/api/admin/office/stream", s.stream)
+	r.Get("/api/admin/office/stream", s.redirectStream)
+	r.Get("/api/office/stream", s.stream)
+	r.Get("/api/office/status", s.getStatus)
 
 	return r
 }
@@ -122,8 +133,33 @@ func (s *officeServer) getSettings(w http.ResponseWriter, r *http.Request) {
 	enabled := (err == nil && val == "true")
 
 	writeSuccess(w, map[string]any{
-		"office_enabled": enabled,
+		"office_enabled":   enabled,
+		"telegram_enabled": s.opt.TelegramEnabled,
 	})
+}
+
+func (s *officeServer) getStatus(w http.ResponseWriter, r *http.Request) {
+	if s.authz == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	_, ok := s.authz(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+
+	writeSuccess(w, map[string]any{
+		"enabled": s.isOfficeEnabled(),
+	})
+}
+
+func (s *officeServer) redirectStream(w http.ResponseWriter, r *http.Request) {
+	target := "/api/office/stream"
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
 }
 
 func (s *officeServer) patchSettings(w http.ResponseWriter, r *http.Request) {
@@ -210,8 +246,13 @@ func writeEventFrame(w io.Writer, ev Event) error {
 }
 
 func (s *officeServer) stream(w http.ResponseWriter, r *http.Request) {
-	if status, code, msg := s.checkAdmin(r); status != 0 {
-		writeError(w, status, code, msg)
+	if s.authz == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	_, ok := s.authz(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 		return
 	}
 
@@ -226,24 +267,54 @@ func (s *officeServer) stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var userID string
+	var hasUser bool
+	if s.opt.User != nil {
+		userID, hasUser = s.opt.User(r)
+	}
+
 	s.mu.Lock()
 	if s.active >= s.opt.MaxStreams {
 		s.mu.Unlock()
 		writeError(w, http.StatusTooManyRequests, "TOO_MANY_CONNECTIONS", "too many connections")
 		return
 	}
+	if hasUser && userID != "" && s.opt.MaxPerUser > 0 {
+		if s.userStreams[userID] >= s.opt.MaxPerUser {
+			s.mu.Unlock()
+			writeError(w, http.StatusTooManyRequests, "TOO_MANY_CONNECTIONS", "too many connections")
+			return
+		}
+	}
+
 	s.active++
+	if hasUser && userID != "" {
+		s.userStreams[userID]++
+	}
 	closeCh := make(chan struct{})
 	streamID := s.nextID
 	s.nextID++
 	s.closers[streamID] = closeCh
 	s.mu.Unlock()
 
+	if s.opt.Presence != nil && hasUser && userID != "" {
+		s.opt.Presence.StreamOpened(userID)
+	}
+
 	defer func() {
 		s.mu.Lock()
 		delete(s.closers, streamID)
 		s.active--
+		if hasUser && userID != "" {
+			if s.userStreams[userID] > 0 {
+				s.userStreams[userID]--
+			}
+		}
 		s.mu.Unlock()
+
+		if s.opt.Presence != nil && hasUser && userID != "" {
+			s.opt.Presence.StreamClosed(userID)
+		}
 	}()
 
 	w.Header().Set("Content-Type", "text/event-stream")

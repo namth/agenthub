@@ -18,7 +18,8 @@ AgentHub là nền tảng điều phối đa AI Agent phân tán (Distributed Mu
 - **Kiểm định chất lượng (QA):** 2 Lớp (GitHub Actions CI chạy trước -> Claude Code AI Review chuyên sâu).
 - **Kênh thông báo tức thì:** Telegram Bot (thông báo duyệt yêu cầu & nghiệm thu PR).
 - **Trưởng phòng trực & chuyển giao (FEAT-01):** Server Go là bộ điều phối duy nhất; việc trí tuệ là job; một agent Claude giữ `lead_lease` (epoch, TTL 90s). Hết limit → `COOLDOWN`, job giao lại cho agent rảnh làm tiếp từ nhánh; fencing bằng `assignment_id`/`epoch`.
-- **Văn phòng ảo (FEAT-02):** SCR-08 tuỳ chọn, pixel-art chỉ quan sát, vẽ từ sự kiện server qua SSE.
+- **Văn phòng ảo (FEAT-02, bản 2):** SCR-08 tuỳ chọn, pixel-art chỉ quan sát, vẽ từ sự kiện server qua SSE; khu làm việc ≥ 8 bàn hai cụm, bàn Trưởng phòng, khu chỉ huy mỗi tài khoản một bàn, logo INOVA; owner + partner xem.
+- **Trạng thái đăng nhập agent (FEAT-06):** `agents.auth_status OK|NEEDS_AUTH|UNKNOWN`, `workers.gh_auth`; agent `NEEDS_AUTH` không nhận việc/không làm lead. Lead có thể là agent bất kỳ có `lead_eligible` (DEC-29). Telegram cấu hình trong `.env` (DEC-30).
 
 ## 3. CẤU TRÚC THƯ MỤC CỐT LÕI
 ```text
@@ -69,4 +70,6 @@ agenthub/
 | FEAT-01 | Luân chuyển Trưởng phòng & chuyển giao khi hết limit | [features/lead-rotation.md](docs/features/lead-rotation.md) |
 | FEAT-02 | Văn phòng ảo (sơ đồ phối hợp trực quan) | [features/virtual-office.md](docs/features/virtual-office.md) |
 | FEAT-03 | Dây chuyền vai trò BA/Designer/Dev/Test | BACKLOG |
-| FEAT-04 | Đa dự án song song | BACKLOG |
+| FEAT-04 | Đa dự án song song | [features/multi-project.md](docs/features/multi-project.md) |
+| FEAT-05 | Thêm máy bằng một lệnh, máy của partner, trang Đóng góp | [features/join-machine.md](docs/features/join-machine.md) |
+| FEAT-06 | Trạng thái đăng nhập agent & trưởng phòng mọi loại agent | [features/agent-auth.md](docs/features/agent-auth.md) |

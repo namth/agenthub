@@ -31,11 +31,14 @@ func newClientConn(hub *Hub, workerID string, ws *websocket.Conn) *clientConn {
 	}
 }
 
-func (c *clientConn) close() {
+func (c *clientConn) close() bool {
+	var closed bool
 	c.closeOnce.Do(func() {
+		closed = true
 		close(c.closed)
 		_ = c.ws.Close()
 	})
+	return closed
 }
 
 func (c *clientConn) enqueue(data []byte) {
@@ -166,15 +169,58 @@ func (c *clientConn) handleMessage(raw []byte) {
 		c.handleLeadRelease(env)
 	case "LEAD_ACTION":
 		c.handleLeadAction(env)
+	case "AGENT_AUTH":
+		c.handleAgentAuth(env, raw)
 	default:
 		c.sendError("BAD_REQUEST", nil)
 	}
 }
 
+type agentAuthMsg struct {
+	Scope        string `json:"scope"`
+	AgentID      string `json:"agent_id"`
+	AuthStatus   string `json:"auth_status"`
+	Detail       string `json:"detail"`
+	AssignmentID string `json:"assignment_id"`
+	HandoffNote  string `json:"handoff_note"`
+	WipCommit    string `json:"wip_commit"`
+}
+
+func (c *clientConn) handleAgentAuth(env incomingEnvelope, raw []byte) {
+	authAPI, ok := c.hub.api.(dispatcher.AuthAPI)
+	if !ok {
+		// Không cài AuthAPI → AGENT_AUTH bị bỏ qua (không lỗi).
+		return
+	}
+
+	var m agentAuthMsg
+	if err := json.Unmarshal(raw, &m); err != nil {
+		c.sendError("BAD_REQUEST", nil)
+		return
+	}
+
+	var err error
+	if m.Scope == "gh" {
+		err = authAPI.SetGhAuth(c.workerID, m.AuthStatus, m.Detail)
+	} else if m.AssignmentID != "" {
+		err = authAPI.AuthRequired(c.workerID, m.AgentID, m.AssignmentID, m.Detail, m.HandoffNote, m.WipCommit)
+	} else {
+		err = authAPI.SetAuth(c.workerID, m.AgentID, m.AuthStatus, m.Detail)
+	}
+
+	if err != nil {
+		c.handleDomainError(err, env)
+	}
+}
+
 type handshakeData struct {
-	OS     string `json:"os"`
-	Agents []struct {
-		Kind string `json:"kind"`
+	OS      string `json:"os"`
+	Version string `json:"version"`
+	GhAuth  string `json:"gh_auth"`
+	Agents  []struct {
+		Kind       string `json:"kind"`
+		AuthStatus string `json:"auth_status"`
+		AuthDetail string `json:"auth_detail"`
 	} `json:"agents"`
 }
 
@@ -184,20 +230,40 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 		_ = json.Unmarshal(env.Data, &d)
 	}
 
-	kinds := make([]string, 0, len(d.Agents))
-	for _, a := range d.Agents {
-		if a.Kind != "" {
-			kinds = append(kinds, a.Kind)
-		}
-	}
+	var agents []dispatcher.Agent
+	var err error
 
-	agents, err := c.hub.api.Connect(c.workerID, kinds)
+	if authAPI, ok := c.hub.api.(dispatcher.AuthAPI); ok {
+		hellos := make([]dispatcher.AgentHello, 0, len(d.Agents))
+		for _, a := range d.Agents {
+			if a.Kind != "" {
+				hellos = append(hellos, dispatcher.AgentHello{
+					Kind:       a.Kind,
+					AuthStatus: a.AuthStatus,
+					AuthDetail: a.AuthDetail,
+				})
+			}
+		}
+		agents, err = authAPI.ConnectAuth(c.workerID, d.GhAuth, hellos)
+	} else {
+		kinds := make([]string, 0, len(d.Agents))
+		for _, a := range d.Agents {
+			if a.Kind != "" {
+				kinds = append(kinds, a.Kind)
+			}
+		}
+		agents, err = c.hub.api.Connect(c.workerID, kinds)
+	}
 	if err != nil {
 		c.handleDomainError(err, env)
 		return
 	}
 
 	c.handshaken = true
+
+	if d.Version != "" && c.hub.versionSink != nil {
+		c.hub.versionSink(c.workerID, d.Version)
+	}
 
 	type agentItem struct {
 		ID     string `json:"id"`
@@ -214,6 +280,9 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 	resp := map[string]any{
 		"event":  "HANDSHAKE_OK",
 		"agents": respAgents,
+	}
+	if c.hub.serverVersion != "" {
+		resp["server_version"] = c.hub.serverVersion
 	}
 	b, _ := json.Marshal(resp)
 	c.send(b)
@@ -257,6 +326,11 @@ func (c *clientConn) handleRequestTask(env incomingEnvelope) {
 	}
 	if c.hub.promptFn != nil {
 		payload["prompt"] = c.hub.promptFn(*asg)
+	}
+	if c.hub.repoFn != nil {
+		if repo := c.hub.repoFn(*asg); repo != "" {
+			payload["repo"] = repo
+		}
 	}
 
 	resp := map[string]any{
@@ -408,6 +482,8 @@ func (c *clientConn) handleDomainError(err error, env incomingEnvelope) {
 		code = "NO_LEAD"
 	case errors.Is(err, dispatcher.ErrNotFound):
 		code = "NOT_FOUND"
+	case errors.Is(err, dispatcher.ErrInvalidAuth):
+		code = "VALIDATION_ERROR"
 	default:
 		code = "INTERNAL"
 	}

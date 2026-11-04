@@ -23,6 +23,9 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   };
 
   const res = await fetch(url, options);
+  if (res.status === 204) {
+    return undefined as unknown as T;
+  }
   let body: ApiResponse<T> | null = null;
   try {
     body = (await res.json()) as ApiResponse<T>;
@@ -60,5 +63,9 @@ export const api = {
       headers: body !== undefined ? { 'Content-Type': 'application/json', ...init?.headers } : init?.headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+  },
+
+  del<T>(url: string, init?: RequestInit): Promise<T> {
+    return request<T>(url, { ...init, method: 'DELETE' });
   },
 };

@@ -1,0 +1,39 @@
+{
+  "id": "TASK-025",
+  "title": "Trang Đóng góp: API tổng hợp theo partner/dự án + dòng thời gian, SCR-10",
+  "status": "accepted",
+  "conversation_id": "0b42aab5-c2a7-4d0a-af15-62091db9ad82",
+  "history": [
+    {
+      "at": "2026-11-04T12:02:37",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T12:04:08",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T12:04:22",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:12:01",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T12:15:22",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-025-contributions/verify.sh",
+    "internal/contrib/contrib_test.go",
+    "web/src/pages/contributions.test.tsx"
+  ],
+  "via": "agy"
+}

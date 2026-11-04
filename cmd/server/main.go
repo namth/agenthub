@@ -17,12 +17,15 @@ import (
 
 	"github.com/namth/agenthub/internal/api"
 	"github.com/namth/agenthub/internal/auth"
+	"github.com/namth/agenthub/internal/contrib"
 	"github.com/namth/agenthub/internal/database"
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
 	"github.com/namth/agenthub/internal/logs"
+	"github.com/namth/agenthub/internal/machines"
 	"github.com/namth/agenthub/internal/office"
 	"github.com/namth/agenthub/internal/pipeline"
+	"github.com/namth/agenthub/internal/projects"
 	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
 	"github.com/namth/agenthub/internal/tasks"
@@ -65,71 +68,6 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// fleetSnapshot dựng ảnh chụp cụm máy cho văn phòng ảo (cùng dạng lead/workers với GET /api/fleet, rút gọn).
-func fleetSnapshot(db *sql.DB, disp dispatcher.API) (any, error) {
-	lease, err := disp.Lead()
-	if err != nil {
-		return nil, err
-	}
-	var leadID any
-	if lease.AgentID != "" {
-		leadID = lease.AgentID
-	}
-	type agent struct {
-		ID            string  `json:"id"`
-		Kind          string  `json:"kind"`
-		Status        string  `json:"status"`
-		CooldownUntil *string `json:"cooldown_until"`
-	}
-	type worker struct {
-		ID         string  `json:"id"`
-		ConnStatus string  `json:"conn_status"`
-		Agents     []agent `json:"agents"`
-	}
-	workers := []*worker{}
-	byID := map[string]*worker{}
-	rows, err := db.Query(`SELECT id, conn_status FROM workers ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		w := &worker{Agents: []agent{}}
-		if err := rows.Scan(&w.ID, &w.ConnStatus); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		workers = append(workers, w)
-		byID[w.ID] = w
-	}
-	rows.Close()
-	rows, err = db.Query(`SELECT id, worker_id, kind, status, cooldown_until FROM agents ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var a agent
-		var wid string
-		var cu sql.NullString
-		if err := rows.Scan(&a.ID, &wid, &a.Kind, &a.Status, &cu); err != nil {
-			return nil, err
-		}
-		if cu.Valid {
-			if t, err := time.Parse("2006-01-02 15:04:05", cu.String); err == nil {
-				v := t.UTC().Format(time.RFC3339)
-				a.CooldownUntil = &v
-			}
-		}
-		if w := byID[wid]; w != nil {
-			w.Agents = append(w.Agents, a)
-		}
-	}
-	return map[string]any{
-		"lead":    map[string]any{"state": lease.State, "agent_id": leadID, "epoch": lease.Epoch},
-		"workers": workers,
-	}, rows.Err()
 }
 
 func randomHex(n int) string {
@@ -194,11 +132,18 @@ func main() {
 	}
 
 	owner, repo := os.Getenv("GITHUB_REPO_OWNER"), os.Getenv("GITHUB_REPO_NAME")
+	ghAPI, ghToken := os.Getenv("GITHUB_API_URL"), os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+	// Chế độ đa dự án (FEAT-04) bật khi biết quản trị hệ thống (GITHUB_OWNER, mặc định = GITHUB_REPO_OWNER).
+	sysOwner := envOr("GITHUB_OWNER", owner)
+	multi := sysOwner != ""
 	projectID, err := ensureProject(db, owner, repo)
 	if err != nil {
 		log.Fatalf("project: %v", err)
 	}
-	gh := tasks.NewGitHubClient(os.Getenv("GITHUB_API_URL"), owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
+	gh := tasks.NewGitHubClient(ghAPI, owner, repo, ghToken, nil)
+	clients := newRepoClients(db, ghAPI, ghToken)
+	isOwnerID := ownerCheck(db, sysOwner)
+	roleIn := memberRole(db)
 
 	var hub *gateway.Hub
 	var pl *pipeline.Pipeline
@@ -214,9 +159,13 @@ func main() {
 			tg.Notify(e)
 		}
 	}))
-	pl = pipeline.New(db, disp, gh, projectID, pipeline.WithCIGate(os.Getenv("CI_GATE") == "true"))
+	plOpts := []pipeline.Option{pipeline.WithCIGate(os.Getenv("CI_GATE") == "true")}
+	if multi {
+		plOpts = append(plOpts, pipeline.WithGitHubFor(clients.GitHubOrNil))
+	}
+	pl = pipeline.New(db, disp, gh, projectID, plOpts...)
 	logStore := logs.NewStore(db, time.Now, 5000)
-	hub = gateway.New(disp, gateway.DBAuthenticator(db),
+	hubOpts := []gateway.Option{
 		gateway.WithLogSink(func(workerID, assignmentID, chunk string) {
 			if err := logStore.Append(workerID, assignmentID, chunk); err != nil {
 				log.Printf("logs: %v", err)
@@ -227,24 +176,47 @@ func main() {
 			if err := pl.OnSubmitted(context.Background(), workerID, assignmentID, prURL, result); err != nil {
 				log.Printf("pipeline: %s: %v", assignmentID, err)
 			}
-		}))
+		}),
+		gateway.WithServerVersion(runner.Version),
+		gateway.WithVersionSink(func(workerID, version string) {
+			if _, err := db.Exec(`UPDATE workers SET version = ? WHERE id = ?`, version, workerID); err != nil {
+				log.Printf("version %s: %v", workerID, err)
+			}
+		}),
+	}
+	if multi {
+		hubOpts = append(hubOpts, gateway.WithRepo(pl.RepoFor))
+	}
+	hub = gateway.New(disp, gateway.DBAuthenticator(db), hubOpts...)
 	defer hub.Close()
+
+	baseURL := baseURLOf(port)
+	projSvc := projects.New(db, projects.NewGitHub(ghAPI, ghToken, nil), projects.Config{
+		Owner:         sysOwner,
+		BaseURL:       baseURL(),
+		WebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
+	})
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if len(jwtSecret) < 32 {
 		log.Println("JWT_SECRET ngắn hơn 32 ký tự: dùng khoá ngẫu nhiên tạm, phiên mất khi khởi động lại")
 		jwtSecret = randomHex(32)
 	}
-	authSvc := auth.New(db, auth.Config{
+	authCfg := auth.Config{
 		ClientID:     os.Getenv("GITHUB_CLIENT_ID"),
 		ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 		BaseURL:      os.Getenv("BASE_URL"),
 		JWTSecret:    jwtSecret,
 		RepoOwner:    owner,
 		RepoName:     repo,
-		ServerToken:  os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"),
-		GitHubAPIURL: os.Getenv("GITHUB_API_URL"),
-	})
+		ServerToken:  ghToken,
+		GitHubAPIURL: ghAPI,
+	}
+	if multi {
+		authCfg.Owner = sysOwner
+		authCfg.OnLogin = projSvc.SyncUser
+	}
+	authSvc := auth.New(db, authCfg)
 	roleOf := func(r *http.Request) (string, bool) {
 		u, ok := auth.UserFrom(r.Context())
 		return u.Role, ok
@@ -254,8 +226,8 @@ func main() {
 		return u.ID, u.Role, ok
 	}
 	fleetAPI := api.FleetHandler(db, disp, roleOf)
-	tasksSvc := tasks.NewService(db, gh, disp, projectID,
-		tasks.WithMerger(tasks.NewGitHubMerger(os.Getenv("GITHUB_API_URL"), owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)),
+	presence := office.NewPresence(db, time.Now, bus, isOwnerID)
+	taskOpts := []tasks.Option{
 		tasks.WithOnMerged(func(prURL string) {
 			if err := pl.OnMerged(context.Background(), prURL); err != nil {
 				log.Printf("pipeline merged: %v", err)
@@ -266,27 +238,106 @@ func main() {
 			if tg != nil {
 				tg.NotifyNewTask(c.TaskID, c.Issue, c.Title, c.Requester, c.Description)
 			}
-		}))
+		}),
+		tasks.WithOnApproved(func(taskID, userID string) {
+			var username string
+			err := db.QueryRow(`SELECT username FROM users WHERE id = ?`, userID).Scan(&username)
+			if err != nil || username == "" {
+				username = userID
+			}
+			bus.Emit(office.Event{
+				Who:  "user:" + username,
+				Type: "approve",
+				Task: taskID,
+			})
+		}),
+	}
+	var tasksSvc *tasks.Service
+	if multi {
+		tasksSvc = tasks.NewMultiService(db, clients.GitHub, disp, append(taskOpts,
+			tasks.WithMergerFor(clients.Merger),
+			tasks.WithOwner(isOwnerID),
+			tasks.WithRoleIn(roleIn))...)
+	} else {
+		tasksSvc = tasks.NewService(db, gh, disp, projectID, append(taskOpts,
+			tasks.WithMerger(tasks.NewGitHubMerger(ghAPI, owner, repo, ghToken, nil)))...)
+	}
 	tasksAPI := tasks.HandlerWithService(tasksSvc, userOf)
-	officeAPI := office.Handler(db, bus, func() (any, error) { return fleetSnapshot(db, disp) }, roleOf, office.Options{})
+	officeOpt := office.Options{
+		User: func(r *http.Request) (string, bool) {
+			u, ok := auth.UserFrom(r.Context())
+			return u.ID, ok
+		},
+		Presence:        presence,
+		TelegramEnabled: tgSender != nil,
+	}
+	officeAPI := office.Handler(db, bus, func() (any, error) {
+		lease, err := disp.Lead()
+		if err != nil {
+			return nil, err
+		}
+		return office.BuildSnapshot(db, lease, presence)
+	}, roleOf, officeOpt)
+	projectsAPI := projects.Handler(projSvc, func(r *http.Request) (string, string, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.ID, u.Username, ok
+	})
+	machinesAPI := machines.Handler(db, machines.Config{
+		BaseURL:    baseURL,
+		RunnersDir: envOr("RUNNERS_DIR", "./runners"),
+		IsOwner:    isOwnerID,
+		IsMember: func(userID, pid string) bool {
+			if isOwnerID(userID) {
+				return true
+			}
+			_, ok := roleIn(userID, pid)
+			return ok
+		},
+		OnRemoved: func(workerID string) {
+			if !hub.CloseWorker(workerID) {
+				_ = disp.Disconnect(workerID)
+			}
+		},
+		Recheck: hub.SendAuthRecheck,
+	}, func(r *http.Request) (string, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.ID, ok
+	})
+	contribAPI := contrib.Handler(db, func(r *http.Request) (string, bool, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.ID, ok && isOwnerID(u.ID), ok
+	})
 
 	mounts := []server.Mount{
 		{Pattern: "/ws/agent", Handler: hub},
 		{Pattern: "/api/auth/*", Handler: authSvc.Routes()},
 		{Pattern: "/api/fleet", Handler: fleetAPI},
+		{Pattern: "/api/fleet/join-codes", Handler: machinesAPI},
+		{Pattern: "/api/fleet/join", Handler: machinesAPI},
+		{Pattern: "/api/my/machines", Handler: machinesAPI},
+		{Pattern: "/api/my/machines/*", Handler: machinesAPI},
+		{Pattern: "/install.sh", Handler: machinesAPI},
+		{Pattern: "/download/*", Handler: machinesAPI},
 		{Pattern: "/api/admin/lead/*", Handler: fleetAPI},
 		{Pattern: "/api/admin/agents/*", Handler: fleetAPI},
+		{Pattern: "/api/projects", Handler: projectsAPI},
+		{Pattern: "/api/admin/projects", Handler: projectsAPI},
+		{Pattern: "/api/admin/projects/*", Handler: projectsAPI},
+		{Pattern: "/api/admin/github/repos", Handler: projectsAPI},
+		{Pattern: "/api/contributions", Handler: contribAPI},
+		{Pattern: "/api/contributions/*", Handler: contribAPI},
 		{Pattern: "/api/tasks", Handler: tasksAPI},
 		{Pattern: "/api/tasks/*", Handler: tasksAPI},
 		{Pattern: "/api/admin/settings", Handler: officeAPI},
 		{Pattern: "/api/admin/office/*", Handler: officeAPI},
+		{Pattern: "/api/office/*", Handler: officeAPI},
 		{Pattern: "/api/admin/workers/*", Handler: logs.Handler(db, logStore, roleOf)},
 	}
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" && tgSender != nil {
 		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandler(tgSender, tasksSvc, tgChat, secret)})
 	}
 	if secret := os.Getenv("GITHUB_WEBHOOK_SECRET"); secret != "" {
-		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: tasks.WebhookHandler(db, secret, projectID,
+		whOpts := []tasks.WebhookOption{
 			tasks.OnWorkflowRun(func(branch, conclusion, url string) {
 				if err := pl.OnCI(context.Background(), branch, conclusion, url); err != nil {
 					log.Printf("pipeline ci: %v", err)
@@ -296,22 +347,48 @@ func main() {
 				if err := pl.OnMerged(context.Background(), prURL); err != nil {
 					log.Printf("pipeline merged: %v", err)
 				}
-			}))})
+			}),
+		}
+		var wh http.Handler
+		if multi {
+			wh = tasks.WebhookHandlerMulti(db, secret, projectOfRepo(db), whOpts...)
+		} else {
+			wh = tasks.WebhookHandler(db, secret, projectID, whOpts...)
+		}
+		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: wh})
 	} else {
 		log.Println("GITHUB_WEBHOOK_SECRET trống: tắt webhook GitHub")
 	}
 	if key := os.Getenv("RUNNER_REGISTRATION_KEY"); key != "" {
 		mounts = append(mounts, server.Mount{Pattern: "/api/fleet/register", Handler: gateway.RegisterHandler(db, key)})
 	} else {
-		log.Println("RUNNER_REGISTRATION_KEY trống: tắt đăng ký máy mới")
+		log.Println("RUNNER_REGISTRATION_KEY trống: chỉ thêm máy bằng mã tham gia")
 	}
+	log.Printf("AgentHub %s · đa dự án=%v (quản trị: %q)", runner.Version, multi, sysOwner)
+
+	presenceMW := presence.Middleware(func(r *http.Request) (string, bool) {
+		u, ok := auth.UserFrom(r.Context())
+		return u.ID, ok
+	})
 
 	srv := &http.Server{
 		Addr:    ":" + port,
-		Handler: authSvc.Middleware(server.New(db, web.Static(), mounts...)),
+		Handler: authSvc.Middleware(presenceMW(server.New(db, web.Static(), mounts...))),
 	}
 
 	ctx, stopTick := context.WithCancel(context.Background())
+	go func() {
+		t := time.NewTicker(60 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				presence.Tick()
+			}
+		}
+	}()
 	go func() {
 		t := time.NewTicker(5 * time.Second)
 		n := 0

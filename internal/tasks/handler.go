@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/namth/agenthub/internal/dispatcher"
@@ -84,8 +85,8 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r := chi.NewRouter()
 
 	createH := handleCreate(s, authz)
-	getTasksH := handleGetTasks(s.db, s.projectID, authz)
-	getDetailH := handleGetTaskDetail(s.db, s.projectID, authz)
+	getTasksH := handleGetTasks(s, authz)
+	getDetailH := handleGetTaskDetail(s, authz)
 	approveH := handleApprove(s, authz)
 	rejectH := handleReject(s, authz)
 	mergeH := handleMerge(s, authz)
@@ -119,12 +120,9 @@ func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
 			return
 		}
-		if role != "ADMIN" && role != "PARTNER" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
-			return
-		}
 
 		var req struct {
+			ProjectID   string `json:"project_id"`
 			Title       string `json:"title"`
 			Description string `json:"description"`
 		}
@@ -133,7 +131,34 @@ func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 			return
 		}
 
-		task, err := s.Create(r.Context(), userID, req.Title, req.Description)
+		var targetProjectID string
+		var isAdmin bool
+
+		if s.isMulti {
+			if strings.TrimSpace(req.ProjectID) == "" {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "thiếu project_id")
+				return
+			}
+			targetProjectID = req.ProjectID
+			projRole, ok := s.UserRoleIn(userID, targetProjectID)
+			if !ok {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "không là thành viên dự án")
+				return
+			}
+			isAdmin = (projRole == "ADMIN")
+		} else {
+			if role != "ADMIN" && role != "PARTNER" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
+				return
+			}
+			targetProjectID = s.projectID
+			if req.ProjectID != "" {
+				targetProjectID = req.ProjectID
+			}
+			isAdmin = (role == "ADMIN")
+		}
+
+		task, err := s.CreateIn(r.Context(), userID, targetProjectID, req.Title, req.Description)
 		if err != nil {
 			writeServiceError(w, err)
 			return
@@ -141,7 +166,7 @@ func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 
 		taskData := map[string]any{
 			"id":              task.ID,
-			"project_id":      s.projectID,
+			"project_id":      task.ProjectID,
 			"parent_id":       task.ParentID,
 			"github_issue_id": task.GitHubIssueID,
 			"title":           task.Title,
@@ -149,7 +174,7 @@ func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 			"status":          task.Status,
 			"created_by":      task.CreatedBy,
 		}
-		if role == "ADMIN" {
+		if isAdmin {
 			taskData["branch_name"] = nil
 			taskData["pr_url"] = nil
 			taskData["assigned_worker_id"] = nil
@@ -161,20 +186,43 @@ func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 
 func handleApprove(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := authz(r)
+		userID, role, ok := authz(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
 			return
 		}
-		if role != "ADMIN" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền duyệt")
-			return
-		}
 
 		taskID := chi.URLParam(r, "id")
+		if s.isMulti {
+			var pID string
+			err := s.db.QueryRowContext(r.Context(), "SELECT project_id FROM tasks WHERE id = ?", taskID).Scan(&pID)
+			if err == sql.ErrNoRows {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+				return
+			}
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn task")
+				return
+			}
+			projRole, hasRole := s.UserRoleIn(userID, pID)
+			if !hasRole || projRole != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "cần vai ADMIN trong dự án của task")
+				return
+			}
+		} else {
+			if role != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền duyệt")
+				return
+			}
+		}
+
 		if err := s.Approve(r.Context(), taskID); err != nil {
 			writeServiceError(w, err)
 			return
+		}
+
+		if s.onApproved != nil {
+			s.onApproved(taskID, userID)
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -186,13 +234,9 @@ func handleApprove(s *Service, authz Authz) http.HandlerFunc {
 
 func handleReject(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := authz(r)
+		userID, role, ok := authz(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
-			return
-		}
-		if role != "ADMIN" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền từ chối")
 			return
 		}
 
@@ -203,6 +247,29 @@ func handleReject(s *Service, authz Authz) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "body không đúng định dạng json")
 			return
+		}
+
+		if s.isMulti {
+			var pID string
+			err := s.db.QueryRowContext(r.Context(), "SELECT project_id FROM tasks WHERE id = ?", taskID).Scan(&pID)
+			if err == sql.ErrNoRows {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+				return
+			}
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn task")
+				return
+			}
+			projRole, hasRole := s.UserRoleIn(userID, pID)
+			if !hasRole || projRole != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "cần vai ADMIN trong dự án của task")
+				return
+			}
+		} else {
+			if role != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền từ chối")
+				return
+			}
 		}
 
 		if err := s.Reject(r.Context(), taskID, req.Reason); err != nil {
@@ -219,13 +286,9 @@ func handleReject(s *Service, authz Authz) http.HandlerFunc {
 
 func handleMerge(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := authz(r)
+		userID, role, ok := authz(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
-			return
-		}
-		if role != "ADMIN" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền merge")
 			return
 		}
 
@@ -233,6 +296,29 @@ func handleMerge(s *Service, authz Authz) http.HandlerFunc {
 		if taskID == "" {
 			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "thiếu task id")
 			return
+		}
+
+		if s.isMulti {
+			var pID string
+			err := s.db.QueryRowContext(r.Context(), "SELECT project_id FROM tasks WHERE id = ?", taskID).Scan(&pID)
+			if err == sql.ErrNoRows {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+				return
+			}
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn task")
+				return
+			}
+			projRole, hasRole := s.UserRoleIn(userID, pID)
+			if !hasRole || projRole != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "cần vai ADMIN trong dự án của task")
+				return
+			}
+		} else {
+			if role != "ADMIN" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền merge")
+				return
+			}
 		}
 
 		if err := s.Merge(r.Context(), taskID); err != nil {
@@ -253,21 +339,54 @@ type kanbanColumn struct {
 	Tasks []map[string]any `json:"tasks"`
 }
 
-func handleGetTasks(db *sql.DB, projectID string, authz Authz) http.HandlerFunc {
+func handleGetTasks(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := authz(r)
+		userID, role, ok := authz(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
 			return
 		}
-		if role != "ADMIN" && role != "PARTNER" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
-			return
-		}
-		isAdmin := role == "ADMIN"
 
-		query := `SELECT id, project_id, parent_id, github_issue_id, title, status, assigned_worker_id, branch_name, pr_url, created_at FROM tasks WHERE project_id = ?`
-		args := []any{projectID}
+		projectIDParam := r.URL.Query().Get("project_id")
+		var filterProjectID string
+		var isAdmin bool
+
+		if s.isMulti {
+			if projectIDParam == "" {
+				if !s.IsOwner(userID) {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "không phải owner mà thiếu project_id")
+					return
+				}
+				isAdmin = true
+				filterProjectID = "" // All projects
+			} else {
+				projRole, hasRole := s.UserRoleIn(userID, projectIDParam)
+				if !hasRole {
+					writeError(w, http.StatusForbidden, "FORBIDDEN", "không là thành viên dự án")
+					return
+				}
+				isAdmin = (projRole == "ADMIN")
+				filterProjectID = projectIDParam
+			}
+		} else {
+			if role != "ADMIN" && role != "PARTNER" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
+				return
+			}
+			isAdmin = (role == "ADMIN")
+			filterProjectID = s.projectID
+			if projectIDParam != "" {
+				filterProjectID = projectIDParam
+			}
+		}
+
+		query := `SELECT id, project_id, parent_id, github_issue_id, title, status, assigned_worker_id, branch_name, pr_url, created_at FROM tasks WHERE 1=1`
+		var args []any
+
+		if filterProjectID != "" {
+			query += ` AND project_id = ?`
+			args = append(args, filterProjectID)
+		}
 
 		if !isAdmin {
 			query += ` AND parent_id IS NULL`
@@ -282,7 +401,7 @@ func handleGetTasks(db *sql.DB, projectID string, authz Authz) http.HandlerFunc 
 		}
 		query += ` ORDER BY created_at ASC`
 
-		rows, err := db.QueryContext(r.Context(), query, args...)
+		rows, err := s.db.QueryContext(r.Context(), query, args...)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn danh sách task")
 			return
@@ -324,6 +443,7 @@ func handleGetTasks(db *sql.DB, projectID string, authz Authz) http.HandlerFunc 
 			if colIdx >= 0 {
 				card := map[string]any{
 					"id":         id,
+					"project_id": pID,
 					"title":      title,
 					"status":     st,
 					"created_at": createdAt,
@@ -367,29 +487,25 @@ func handleGetTasks(db *sql.DB, projectID string, authz Authz) http.HandlerFunc 
 	}
 }
 
-func handleGetTaskDetail(db *sql.DB, projectID string, authz Authz) http.HandlerFunc {
+func handleGetTaskDetail(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := authz(r)
+		userID, role, ok := authz(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
 			return
 		}
-		if role != "ADMIN" && role != "PARTNER" {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
-			return
-		}
-		isAdmin := role == "ADMIN"
+
 		taskID := chi.URLParam(r, "id")
 
 		var id, pID, title, desc, st, createdBy, createdAt, updatedAt string
 		var parentID, assignedWorker, branch, pr sql.NullString
 		var ghIssueID sql.NullInt64
 
-		err := db.QueryRowContext(r.Context(), `
+		err := s.db.QueryRowContext(r.Context(), `
 			SELECT id, project_id, parent_id, github_issue_id, title, description, status, assigned_worker_id, branch_name, pr_url, created_by, created_at, updated_at
 			FROM tasks
-			WHERE id = ? AND project_id = ?
-		`, taskID, projectID).Scan(&id, &pID, &parentID, &ghIssueID, &title, &desc, &st, &assignedWorker, &branch, &pr, &createdBy, &createdAt, &updatedAt)
+			WHERE id = ?
+		`, taskID).Scan(&id, &pID, &parentID, &ghIssueID, &title, &desc, &st, &assignedWorker, &branch, &pr, &createdBy, &createdAt, &updatedAt)
 		if err == sql.ErrNoRows {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
 			return
@@ -397,6 +513,26 @@ func handleGetTaskDetail(db *sql.DB, projectID string, authz Authz) http.Handler
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn task")
 			return
+		}
+
+		var isAdmin bool
+		if s.isMulti {
+			projRole, hasRole := s.UserRoleIn(userID, pID)
+			if !hasRole {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "không có quyền trong dự án của task")
+				return
+			}
+			isAdmin = (projRole == "ADMIN")
+		} else {
+			if role != "ADMIN" && role != "PARTNER" {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "không đủ quyền hạn")
+				return
+			}
+			if s.projectID != "" && pID != s.projectID {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+				return
+			}
+			isAdmin = (role == "ADMIN")
 		}
 
 		// Partner không được xem sub-task
@@ -444,12 +580,12 @@ func handleGetTaskDetail(db *sql.DB, projectID string, authz Authz) http.Handler
 		}
 
 		// Lấy danh sách subtasks
-		subRows, err := db.QueryContext(r.Context(), `
+		subRows, err := s.db.QueryContext(r.Context(), `
 			SELECT id, project_id, parent_id, github_issue_id, title, description, status, assigned_worker_id, branch_name, pr_url, created_by, created_at, updated_at
 			FROM tasks
 			WHERE parent_id = ? AND project_id = ?
 			ORDER BY created_at ASC
-		`, taskID, projectID)
+		`, taskID, pID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn sub-task")
 			return

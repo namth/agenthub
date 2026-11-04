@@ -41,6 +41,8 @@ type Config struct {
 	SessionTTL   time.Duration
 	HTTPClient   *http.Client
 	Now          func() time.Time
+	Owner        string
+	OnLogin      func(ctx context.Context, userID, login string) (int, error)
 }
 
 type Service struct {
@@ -343,69 +345,115 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	permURL := fmt.Sprintf("%s/repos/%s/%s/collaborators/%s/permission", s.cfg.GitHubAPIURL, s.cfg.RepoOwner, s.cfg.RepoName, url.PathEscape(ghUser.Login))
-	permReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, permURL, nil)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to check permission")
-		return
-	}
-	permReq.Header.Set("Authorization", "Bearer "+s.cfg.ServerToken)
-	permReq.Header.Set("Accept", "application/json")
-
-	permResp, err := s.cfg.HTTPClient.Do(permReq)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to check permission")
-		return
-	}
-	defer permResp.Body.Close()
-
-	if permResp.StatusCode == http.StatusNotFound {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "user is not a collaborator")
-		return
-	}
-	if permResp.StatusCode != http.StatusOK {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "collaborator check failed")
-		return
-	}
-
-	var permResult struct {
-		Permission string `json:"permission"`
-	}
-	if err := json.NewDecoder(permResp.Body).Decode(&permResult); err != nil {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to parse permission")
-		return
-	}
-
-	role := "PARTNER"
-	switch permResult.Permission {
-	case "admin", "maintain":
-		role = "ADMIN"
-	}
-
+	var role string
 	var userID string
-	err = s.db.QueryRowContext(r.Context(), `SELECT id FROM users WHERE github_id = ?`, ghIDStr).Scan(&userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		userID = uuid.NewString()
-		_, err = s.db.ExecContext(r.Context(), `
-			INSERT INTO users (id, github_id, username, avatar_url, role)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, ghIDStr, ghUser.Login, ghUser.AvatarURL, role)
+
+	if s.cfg.OnLogin != nil {
+		isOwner := s.cfg.Owner != "" && strings.EqualFold(ghUser.Login, s.cfg.Owner)
+		role = "PARTNER"
+		if isOwner {
+			role = "ADMIN"
+		}
+
+		err = s.db.QueryRowContext(r.Context(), `SELECT id FROM users WHERE github_id = ?`, ghIDStr).Scan(&userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			userID = uuid.NewString()
+			_, err = s.db.ExecContext(r.Context(), `
+				INSERT INTO users (id, github_id, username, avatar_url, role)
+				VALUES (?, ?, ?, ?, ?)
+			`, userID, ghIDStr, ghUser.Login, ghUser.AvatarURL, role)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create user")
+				return
+			}
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
+			return
+		} else {
+			_, err = s.db.ExecContext(r.Context(), `
+				UPDATE users
+				SET username = ?, avatar_url = ?, role = ?
+				WHERE id = ?
+			`, ghUser.Login, ghUser.AvatarURL, role, userID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update user")
+				return
+			}
+		}
+
+		n, err := s.cfg.OnLogin(r.Context(), userID, ghUser.Login)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create user")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to sync user")
 			return
 		}
-	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
-		return
-	} else {
-		_, err = s.db.ExecContext(r.Context(), `
-			UPDATE users
-			SET username = ?, avatar_url = ?, role = ?
-			WHERE id = ?
-		`, ghUser.Login, ghUser.AvatarURL, role, userID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update user")
+		if !isOwner && n == 0 {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "not a member of any project")
 			return
+		}
+	} else {
+		permURL := fmt.Sprintf("%s/repos/%s/%s/collaborators/%s/permission", s.cfg.GitHubAPIURL, s.cfg.RepoOwner, s.cfg.RepoName, url.PathEscape(ghUser.Login))
+		permReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, permURL, nil)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to check permission")
+			return
+		}
+		permReq.Header.Set("Authorization", "Bearer "+s.cfg.ServerToken)
+		permReq.Header.Set("Accept", "application/json")
+
+		permResp, err := s.cfg.HTTPClient.Do(permReq)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to check permission")
+			return
+		}
+		defer permResp.Body.Close()
+
+		if permResp.StatusCode == http.StatusNotFound {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "user is not a collaborator")
+			return
+		}
+		if permResp.StatusCode != http.StatusOK {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "collaborator check failed")
+			return
+		}
+
+		var permResult struct {
+			Permission string `json:"permission"`
+		}
+		if err := json.NewDecoder(permResp.Body).Decode(&permResult); err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "failed to parse permission")
+			return
+		}
+
+		role = "PARTNER"
+		switch permResult.Permission {
+		case "admin", "maintain":
+			role = "ADMIN"
+		}
+
+		err = s.db.QueryRowContext(r.Context(), `SELECT id FROM users WHERE github_id = ?`, ghIDStr).Scan(&userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			userID = uuid.NewString()
+			_, err = s.db.ExecContext(r.Context(), `
+				INSERT INTO users (id, github_id, username, avatar_url, role)
+				VALUES (?, ?, ?, ?, ?)
+			`, userID, ghIDStr, ghUser.Login, ghUser.AvatarURL, role)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create user")
+				return
+			}
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
+			return
+		} else {
+			_, err = s.db.ExecContext(r.Context(), `
+				UPDATE users
+				SET username = ?, avatar_url = ?, role = ?
+				WHERE id = ?
+			`, ghUser.Login, ghUser.AvatarURL, role, userID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update user")
+				return
+			}
 		}
 	}
 

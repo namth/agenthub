@@ -84,7 +84,7 @@ func TestOpenCreatesFileAndAllTables(t *testing.T) {
 		t.Fatalf("không tạo file DB ở %s: %v", path, err)
 	}
 	got := names(t, db, `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
-	want := []string{"agents", "assignments", "jobs", "lead_journal", "lead_lease", "projects", "settings", "task_logs", "tasks", "users", "workers"}
+	want := []string{"agent_projects", "agents", "assignments", "jobs", "join_codes", "lead_journal", "lead_lease", "project_members", "projects", "schema_migrations", "settings", "task_logs", "tasks", "users", "workers"}
 	if len(got) != len(want) {
 		t.Fatalf("bảng = %v, muốn đúng %v", got, want)
 	}

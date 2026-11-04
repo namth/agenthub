@@ -91,10 +91,13 @@ type FleetLead struct {
 }
 
 type CurrentJobItem struct {
-	JobID   string `json:"job_id"`
-	TaskID  string `json:"task_id"`
-	Kind    string `json:"kind"`
-	Attempt int    `json:"attempt"`
+	JobID     string `json:"job_id"`
+	TaskID    string `json:"task_id"`
+	Kind      string `json:"kind"`
+	Attempt   int    `json:"attempt"`
+	ProjectID string `json:"project_id"`
+	Project   string `json:"project"`
+	TaskTitle string `json:"task_title"`
 }
 
 type AgentItem struct {
@@ -106,16 +109,30 @@ type AgentItem struct {
 	SoftMaxJobs     *int            `json:"soft_max_jobs"`
 	SoftWindowHours int             `json:"soft_window_hours"`
 	JobsInWindow    int             `json:"jobs_in_window"`
+	LeadEligible    bool            `json:"lead_eligible"`
+	AuthStatus      string          `json:"auth_status"`
+	AuthDetail      *string         `json:"auth_detail"`
+	AuthCheckedAt   *string         `json:"auth_checked_at"`
+	Projects        *[]string       `json:"projects"`
 	CurrentJob      *CurrentJobItem `json:"current_job"`
 }
 
+type WorkerOwner struct {
+	ID    string `json:"id"`
+	Login string `json:"login"`
+}
+
 type WorkerItem struct {
-	ID           string      `json:"id"`
-	Name         string      `json:"name"`
-	OS           string      `json:"os"`
-	ConnStatus   string      `json:"conn_status"`
-	OfflineSince *string     `json:"offline_since"`
-	Agents       []AgentItem `json:"agents"`
+	ID           string       `json:"id"`
+	Name         string       `json:"name"`
+	OS           string       `json:"os"`
+	ConnStatus   string       `json:"conn_status"`
+	OfflineSince *string      `json:"offline_since"`
+	Owner        *WorkerOwner `json:"owner"`
+	Version      *string      `json:"version"`
+	Paused       bool         `json:"paused"`
+	GhAuth       string       `json:"gh_auth"`
+	Agents       []AgentItem  `json:"agents"`
 }
 
 type FleetResponse struct {
@@ -194,21 +211,26 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 		fleetLead.VacantSince = formatRFC3339(vacantSinceVal)
 	}
 
-	// ETA = MIN(cooldown_until) của agent CLAUDE đang COOLDOWN
+	// ETA = MIN(cooldown_until) của agent lead_eligible=1 đang COOLDOWN (mọi loại)
 	var minCdVal any
 	_ = db.QueryRow(
-		"SELECT MIN(cooldown_until) FROM agents WHERE kind = 'CLAUDE' AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+		"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
 	).Scan(&minCdVal)
 	fleetLead.ETA = formatRFC3339(minCdVal)
 
-	// Waiting jobs = số job required_agent='CLAUDE' đang QUEUED
+	// Waiting jobs = số job lead_only hoặc required_agent='CLAUDE' đang QUEUED
 	var waitingJobs int
-	_ = db.QueryRow("SELECT COUNT(*) FROM jobs WHERE required_agent = 'CLAUDE' AND status = 'QUEUED'").Scan(&waitingJobs)
+	_ = db.QueryRow("SELECT COUNT(*) FROM jobs WHERE (lead_only = 1 OR required_agent = 'CLAUDE') AND status = 'QUEUED'").Scan(&waitingJobs)
 	fleetLead.WaitingJobs = waitingJobs
 
 	// Workers
 	workers := make([]WorkerItem, 0)
-	rows, err := db.Query("SELECT id, name, os, conn_status, offline_since FROM workers ORDER BY id ASC")
+	rows, err := db.Query(`
+		SELECT w.id, w.name, w.os, w.conn_status, w.offline_since, w.version, w.paused, u.id, u.username, w.gh_auth
+		FROM workers w
+		LEFT JOIN users u ON w.owner_user_id = u.id
+		ORDER BY w.id ASC
+	`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi truy vấn workers")
 		return
@@ -218,11 +240,25 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 	for rows.Next() {
 		var wk WorkerItem
 		var offVal any
-		if err := rows.Scan(&wk.ID, &wk.Name, &wk.OS, &wk.ConnStatus, &offVal); err != nil {
+		var verVal sql.NullString
+		var pausedInt int
+		var uID sql.NullString
+		var uName sql.NullString
+		if err := rows.Scan(&wk.ID, &wk.Name, &wk.OS, &wk.ConnStatus, &offVal, &verVal, &pausedInt, &uID, &uName, &wk.GhAuth); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi đọc workers")
 			return
 		}
 		wk.OfflineSince = formatRFC3339(offVal)
+		if verVal.Valid {
+			wk.Version = &verVal.String
+		}
+		wk.Paused = (pausedInt != 0)
+		if uID.Valid && uName.Valid {
+			wk.Owner = &WorkerOwner{
+				ID:    uID.String,
+				Login: uName.String,
+			}
+		}
 		wk.Agents = make([]AgentItem, 0)
 
 		// Lấy agents của worker
@@ -267,16 +303,28 @@ func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
 	var cdVal any
 	var lp sql.NullInt64
 	var sm sql.NullInt64
+	var leadEligibleInt int
+	var authStatus string
+	var authDetail, authCheckedAt sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours
+		`SELECT id, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours, lead_eligible, auth_status, auth_detail, auth_checked_at
 		 FROM agents WHERE id = ?`,
 		agentID,
-	).Scan(&ag.ID, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours)
+	).Scan(&ag.ID, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours, &leadEligibleInt, &authStatus, &authDetail, &authCheckedAt)
 	if err != nil {
 		return nil, err
 	}
 
+	ag.AuthStatus = authStatus
+	if authDetail.Valid && authDetail.String != "" {
+		ag.AuthDetail = &authDetail.String
+	}
+	if authCheckedAt.Valid && authCheckedAt.String != "" {
+		ag.AuthCheckedAt = formatRFC3339(authCheckedAt.String)
+	}
+
+	ag.LeadEligible = (leadEligibleInt != 0)
 	ag.CooldownUntil = formatRFC3339(cdVal)
 	if lp.Valid {
 		v := int(lp.Int64)
@@ -288,6 +336,28 @@ func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
 	}
 	if ag.SoftWindowHours <= 0 {
 		ag.SoftWindowHours = 5
+	}
+
+	pRows, err := db.Query("SELECT project_id FROM agent_projects WHERE agent_id = ? ORDER BY project_id ASC", agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer pRows.Close()
+
+	var pList []string
+	for pRows.Next() {
+		var pid string
+		if err := pRows.Scan(&pid); err == nil {
+			pList = append(pList, pid)
+		}
+	}
+	if err := pRows.Err(); err != nil {
+		return nil, err
+	}
+	if len(pList) > 0 {
+		ag.Projects = &pList
+	} else {
+		ag.Projects = nil
 	}
 
 	// Tính jobs_in_window theo thời gian thật hiện tại
@@ -304,14 +374,16 @@ func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
 	// Current job của assignment ACTIVE
 	var cj CurrentJobItem
 	err = db.QueryRow(
-		`SELECT a.job_id, j.task_id, j.kind, a.attempt
+		`SELECT a.job_id, j.task_id, j.kind, a.attempt, j.project_id, p.github_repo, t.title
 		 FROM assignments a
 		 JOIN jobs j ON a.job_id = j.id
+		 JOIN projects p ON j.project_id = p.id
+		 JOIN tasks t ON j.task_id = t.id
 		 WHERE a.agent_id = ? AND a.status = 'ACTIVE'
 		 ORDER BY a.started_at DESC
 		 LIMIT 1`,
 		agentID,
-	).Scan(&cj.JobID, &cj.TaskID, &cj.Kind, &cj.Attempt)
+	).Scan(&cj.JobID, &cj.TaskID, &cj.Kind, &cj.Attempt, &cj.ProjectID, &cj.Project, &cj.TaskTitle)
 	if err == nil {
 		ag.CurrentJob = &cj
 	} else if errors.Is(err, sql.ErrNoRows) {
@@ -401,8 +473,8 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 		return
 	}
 
-	var kind string
-	err = db.QueryRow("SELECT kind FROM agents WHERE id = ?", agentID).Scan(&kind)
+	var existsID string
+	err = db.QueryRow("SELECT id FROM agents WHERE id = ?", agentID).Scan(&existsID)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy agent")
 		return
@@ -420,7 +492,7 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 	}
 
 	for k := range rawMap {
-		if k != "lead_priority" && k != "soft_max_jobs" && k != "soft_window_hours" {
+		if k != "lead_priority" && k != "soft_max_jobs" && k != "soft_window_hours" && k != "lead_eligible" && k != "projects" {
 			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "khoá lạ: "+k)
 			return
 		}
@@ -429,10 +501,6 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 	var updateLeadPriority bool
 	var newLeadPriority *int
 	if raw, ok := rawMap["lead_priority"]; ok {
-		if kind != "CLAUDE" {
-			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "lead_priority chỉ áp dụng cho agent CLAUDE")
-			return
-		}
 		updateLeadPriority = true
 		if string(raw) == "null" {
 			newLeadPriority = nil
@@ -508,6 +576,70 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 		newSoftWindowHours = val
 	}
 
+	var updateLeadEligible bool
+	var newLeadEligible int
+	if raw, ok := rawMap["lead_eligible"]; ok {
+		if string(raw) == "null" {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "lead_eligible không được null")
+			return
+		}
+		var b bool
+		if err := json.Unmarshal(raw, &b); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "lead_eligible phải là boolean")
+			return
+		}
+		updateLeadEligible = true
+		if b {
+			newLeadEligible = 1
+		} else {
+			newLeadEligible = 0
+		}
+	}
+
+	var updateProjects bool
+	var newProjectIDs []string
+	if raw, ok := rawMap["projects"]; ok {
+		updateProjects = true
+		if string(raw) == "null" {
+			newProjectIDs = nil
+		} else {
+			var rawList []any
+			if err := json.Unmarshal(raw, &rawList); err != nil {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "projects phải là mảng hoặc null")
+				return
+			}
+			for _, item := range rawList {
+				s, ok := item.(string)
+				if !ok {
+					writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "mỗi project id phải là chuỗi")
+					return
+				}
+				newProjectIDs = append(newProjectIDs, s)
+			}
+		}
+	}
+
+	var uniqueProjects []string
+	if updateProjects && len(newProjectIDs) > 0 {
+		seen := make(map[string]bool)
+		for _, pid := range newProjectIDs {
+			var dummy int
+			err := db.QueryRow("SELECT 1 FROM projects WHERE id = ?", pid).Scan(&dummy)
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "project không tồn tại: "+pid)
+				return
+			}
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi kiểm tra dự án")
+				return
+			}
+			if !seen[pid] {
+				seen[pid] = true
+				uniqueProjects = append(uniqueProjects, pid)
+			}
+		}
+	}
+
 	var setClauses []string
 	var args []any
 	if updateLeadPriority {
@@ -522,14 +654,43 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 		setClauses = append(setClauses, "soft_window_hours = ?")
 		args = append(args, newSoftWindowHours)
 	}
+	if updateLeadEligible {
+		setClauses = append(setClauses, "lead_eligible = ?")
+		args = append(args, newLeadEligible)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi bắt đầu transaction")
+		return
+	}
+	defer tx.Rollback()
 
 	if len(setClauses) > 0 {
 		query := "UPDATE agents SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
 		args = append(args, agentID)
-		if _, err := db.Exec(query, args...); err != nil {
+		if _, err := tx.Exec(query, args...); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi cập nhật agent")
 			return
 		}
+	}
+
+	if updateProjects {
+		if _, err := tx.Exec("DELETE FROM agent_projects WHERE agent_id = ?", agentID); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi xoá agent_projects")
+			return
+		}
+		for _, pid := range uniqueProjects {
+			if _, err := tx.Exec("INSERT INTO agent_projects (agent_id, project_id) VALUES (?, ?)", agentID, pid); err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi thêm agent_projects")
+				return
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi commit")
+		return
 	}
 
 	updatedAgent, err := getAgentDetail(db, agentID)
