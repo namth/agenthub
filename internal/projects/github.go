@@ -46,8 +46,8 @@ func NewGitHub(apiURL, token string, hc *http.Client) GitHub {
 
 func (g *ghClient) ListRepos(ctx context.Context) ([]Repo, error) {
 	var allRepos []Repo
-	page := 1
-	for {
+	// Dừng khi trang thiếu (< per_page) hoặc rỗng; tối đa 50 trang để không lặp vô hạn.
+	for page := 1; page <= 50; page++ {
 		reqURL := fmt.Sprintf("%s/user/repos?affiliation=owner,collaborator&per_page=100&page=%d", g.apiURL, page)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		if err != nil {
@@ -60,21 +60,20 @@ func (g *ghClient) ListRepos(ctx context.Context) ([]Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
-
+		var repos []Repo
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			return nil, fmt.Errorf("github api error: %d", resp.StatusCode)
 		}
-
-		var repos []Repo
-		if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		err = json.NewDecoder(resp.Body).Decode(&repos)
+		resp.Body.Close()
+		if err != nil {
 			return nil, err
 		}
-		if len(repos) == 0 {
+		allRepos = append(allRepos, repos...)
+		if len(repos) < 100 {
 			break
 		}
-		allRepos = append(allRepos, repos...)
-		page++
 	}
 	return allRepos, nil
 }
