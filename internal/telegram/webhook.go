@@ -29,6 +29,11 @@ type Commander interface {
 	Merge(ctx context.Context, id string) error
 }
 
+// Clarifier thực hiện chọn phương án làm rõ từ Telegram.
+type Clarifier interface {
+	PickOption(ctx context.Context, taskID string, round int, questionID string, optionIdx int) (bool, error)
+}
+
 // ErrNotFound trả về khi không tìm thấy dự án hoặc task.
 var ErrNotFound = errors.New("NOT_FOUND")
 
@@ -95,6 +100,43 @@ func WebhookHandlerWith(s Sender, a Approver, c Commander, adminChatID, secret s
 			}
 
 			if chatID != adminChatID {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			if strings.HasPrefix(cb.Data, "clarify:") {
+				clar, ok := c.(Clarifier)
+				if !ok || clar == nil {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				parts := strings.Split(cb.Data, ":")
+				if len(parts) != 5 {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				taskID := parts[1]
+				round, err := strconv.Atoi(parts[2])
+				if err != nil {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				questionID := parts[3]
+				idx, err := strconv.Atoi(parts[4])
+				if err != nil {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+
+				ctx := r.Context()
+				done, err := clar.PickOption(ctx, taskID, round, questionID, idx)
+				if err != nil {
+					_ = s.AnswerCallback(ctx, cb.ID, fmt.Sprintf("Không thực hiện được: %v", err))
+				} else if done {
+					_ = s.AnswerCallback(ctx, cb.ID, "Đã gửi cho trưởng phòng")
+				} else {
+					_ = s.AnswerCallback(ctx, cb.ID, "Đã ghi")
+				}
 				w.WriteHeader(http.StatusOK)
 				return
 			}
