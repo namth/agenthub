@@ -1,12 +1,16 @@
 import { NavLink, Outlet } from 'react-router';
 import { sidebarNav } from '../nav';
 import type { User } from '../hooks/useAuth';
+import ProjectSwitcher from '../components/ProjectSwitcher';
 
 export default function AppShell({ user, officeEnabled }: { user: User; officeEnabled: boolean }) {
   return (
     <div className="flex min-h-screen">
       <aside className="w-56 shrink-0 border-r border-slate-200 bg-white px-3 py-4">
-        <div className="mb-6 px-2 text-lg font-semibold">AgentHub</div>
+        <div className="mb-4 px-2 text-lg font-semibold">AgentHub</div>
+        <div className="mb-4 px-1">
+          <ProjectSwitcher isOwner={user.role === 'ADMIN'} />
+        </div>
         <nav className="flex flex-col gap-1">
           {sidebarNav(user.role, officeEnabled).map((n) => (
             <NavLink

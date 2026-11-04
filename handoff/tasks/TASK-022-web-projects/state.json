@@ -1,18 +1,39 @@
 {
   "id": "TASK-022",
   "title": "UI đa dự án: ô chọn dự án, SCR-09, Kanban/Tạo yêu cầu theo dự án",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "f4ff248a-ebb1-494b-91d0-5115990c7f7b",
   "history": [
     {
       "at": "2026-11-04T14:20:04",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T14:21:40",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T14:22:08",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T14:31:47",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T14:32:37",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-022-web-projects/verify.sh",
     "web/src/pages/projects.test.tsx",
     "web/src/pages/screens.test.tsx"
-  ]
+  ],
+  "via": "agy"
 }

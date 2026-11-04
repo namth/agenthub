@@ -3,9 +3,11 @@ import { Link } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
 import type { Role } from '../nav';
+import { ALL_PROJECTS, type Project, useSelectedProject } from '../project';
 
 export interface Task {
   id: string;
+  project_id?: string | null;
   title: string;
   status: string;
   github_issue_id?: number | null;
@@ -24,17 +26,36 @@ export interface KanbanBoard {
 }
 
 export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
+  const selectedProjectId = useSelectedProject();
   const [board, setBoard] = useState<KanbanBoard | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
+  const fetchProjects = useCallback(async () => {
+    try {
+      const data = await api.get<Project[]>('/api/projects');
+      setProjects(data || []);
+    } catch {
+      // Bỏ qua lỗi theo đặc tả (không hiện banner)
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects, selectedProjectId]);
+
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get<KanbanBoard>('/api/tasks');
+      const url =
+        selectedProjectId && selectedProjectId !== ALL_PROJECTS
+          ? `/api/tasks?project_id=${encodeURIComponent(selectedProjectId)}`
+          : '/api/tasks';
+      const data = await api.get<KanbanBoard>(url);
       setBoard(data);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -47,7 +68,7 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedProjectId]);
 
   useEffect(() => {
     fetchTasks();
@@ -71,6 +92,10 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
       setApprovingId(null);
     }
   };
+
+  const currentProject = projects.find((p) => p.id === selectedProjectId);
+  const isArchived = currentProject?.status === 'ARCHIVED';
+  const canApprove = !isArchived && (role === 'ADMIN' || currentProject?.role === 'ADMIN');
 
   if (loading) {
     return (
@@ -105,6 +130,11 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
             Tạo yêu cầu
           </Link>
         </div>
+        {isArchived && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Dự án đã lưu trữ — chỉ xem
+          </div>
+        )}
         <Empty
           title="Chưa có tác vụ nào trong hàng đợi"
           action={
@@ -136,6 +166,12 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
           Tạo yêu cầu
         </Link>
       </div>
+
+      {isArchived && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Dự án đã lưu trữ — chỉ xem
+        </div>
+      )}
 
       {actionError && <ErrorBanner message={actionError} />}
 
@@ -172,7 +208,13 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
                     </div>
                   )}
 
-                  {column.key === 'backlog' && role === 'ADMIN' && (
+                  {selectedProjectId === ALL_PROJECTS && task.project_id && (
+                    <div className="mt-1 text-xs font-medium text-slate-600">
+                      {projects.find((p) => p.id === task.project_id)?.github_repo || task.project_id}
+                    </div>
+                  )}
+
+                  {column.key === 'backlog' && canApprove && (
                     <div className="mt-3 flex justify-end">
                       <button
                         type="button"
