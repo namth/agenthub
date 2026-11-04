@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -160,7 +161,72 @@ func main() {
 			tg.Notify(e)
 		}
 	}))
-	plOpts := []pipeline.Option{pipeline.WithCIGate(os.Getenv("CI_GATE") == "true")}
+	ghForTask := func(projectID string) tasks.GitHub {
+		if clients != nil {
+			if c := clients.GitHubOrNil(projectID); c != nil {
+				return c
+			}
+		}
+		return gh
+	}
+	plOpts := []pipeline.Option{
+		pipeline.WithCIGate(os.Getenv("CI_GATE") == "true"),
+		pipeline.WithOnNeedInfo(func(taskID string, round int, qs []pipeline.ClarifyQuestion) {
+			var projectID, title string
+			var issueNum sql.NullInt64
+			err := db.QueryRow(`SELECT project_id, title, github_issue_id FROM tasks WHERE id = ?`, taskID).Scan(&projectID, &title, &issueNum)
+			if err != nil {
+				return
+			}
+			if issueNum.Valid && issueNum.Int64 > 0 {
+				client := ghForTask(projectID)
+				if commenter, ok := client.(tasks.Commenter); ok {
+					body := formatClarifyComment(round, qs)
+					_ = commenter.CommentIssue(context.Background(), int(issueNum.Int64), body)
+				}
+			}
+			if tg != nil {
+				tqs := make([]telegram.ClarifyQ, len(qs))
+				for i, q := range qs {
+					tqs[i] = telegram.ClarifyQ{
+						ID:          q.ID,
+						Question:    q.Question,
+						Options:     q.Options,
+						Recommended: q.Recommended,
+					}
+				}
+				tg.NotifyClarifyQuestions(taskID, title, round, tqs)
+			}
+		}),
+		pipeline.WithOnClarifyReminder(func(taskID string, round int, hours int) {
+			var projectID, title string
+			var issueNum sql.NullInt64
+			err := db.QueryRow(`SELECT project_id, title, github_issue_id FROM tasks WHERE id = ?`, taskID).Scan(&projectID, &title, &issueNum)
+			if err != nil {
+				return
+			}
+			if tg != nil {
+				tg.NotifyClarifyReminder(taskID, title, hours)
+			}
+			if issueNum.Valid && issueNum.Int64 > 0 {
+				client := ghForTask(projectID)
+				if commenter, ok := client.(tasks.Commenter); ok {
+					body := fmt.Sprintf("⏰ **Nhắc làm rõ (%dh)**: Vui lòng trả lời câu hỏi vòng %d bằng cú pháp `/answer <id>: <giá trị>`.", hours, round)
+					_ = commenter.CommentIssue(context.Background(), int(issueNum.Int64), body)
+				}
+			}
+		}),
+		pipeline.WithOnClarifyCapped(func(taskID string) {
+			var title string
+			err := db.QueryRow(`SELECT title FROM tasks WHERE id = ?`, taskID).Scan(&title)
+			if err != nil {
+				return
+			}
+			if tg != nil {
+				tg.NotifyClarifyCapped(taskID, title)
+			}
+		}),
+	}
 	if multi {
 		plOpts = append(plOpts, pipeline.WithGitHubFor(clients.GitHubOrNil))
 	}
@@ -450,6 +516,22 @@ func main() {
 			}
 		}
 	}()
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n, err := pl.RemindClarifications(ctx, time.Now()); err != nil {
+					log.Printf("pipeline remind clarifications: %v", err)
+				} else if n > 0 {
+					log.Printf("pipeline remind clarifications: nhắc %d vòng", n)
+				}
+			}
+		}
+	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -472,4 +554,40 @@ func main() {
 		log.Printf("server shutdown warning: %v", err)
 	}
 	log.Println("Server stopped")
+}
+
+func formatClarifyComment(round int, qs []pipeline.ClarifyQuestion) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("### ❓ Câu hỏi làm rõ yêu cầu (vòng %d)\n\n", round))
+	sb.WriteString("Trưởng phòng cần làm rõ các câu hỏi sau trước khi tiếp tục lập kế hoạch:\n\n")
+	for i, q := range qs {
+		sb.WriteString(fmt.Sprintf("%d. **%s** (`%s`)\n", i+1, q.Question, q.ID))
+		if len(q.Options) > 0 {
+			sb.WriteString("   - Các lựa chọn: ")
+			var opts []string
+			for _, opt := range q.Options {
+				if opt == q.Recommended {
+					opts = append(opts, fmt.Sprintf("`%s` (Đề xuất)", opt))
+				} else {
+					opts = append(opts, fmt.Sprintf("`%s`", opt))
+				}
+			}
+			sb.WriteString(strings.Join(opts, ", ") + "\n")
+		}
+		if q.Reason != "" {
+			sb.WriteString(fmt.Sprintf("   - Lý do: %s\n", q.Reason))
+		}
+	}
+	sb.WriteString("\n---\n**Cách trả lời:** Bình luận tại issue này bằng cú pháp:\n```\n")
+	for _, q := range qs {
+		val := "<giá trị>"
+		if q.Recommended != "" {
+			val = q.Recommended
+		} else if len(q.Options) > 0 {
+			val = q.Options[0]
+		}
+		sb.WriteString(fmt.Sprintf("/answer %s: %s\n", q.ID, val))
+	}
+	sb.WriteString("/answer _notes: ghi chú thêm nếu có\n```\n")
+	return sb.String()
 }
