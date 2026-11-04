@@ -328,8 +328,15 @@ export default function Office() {
                   position: 'absolute',
                   left: `${(ml.x / layout.width) * 100}%`,
                   top: `${(ml.y / layout.height) * 100}%`,
-                  fontSize: '9px',
-                  color: '#94a3b8',
+                  fontSize: '11px',
+                  lineHeight: '14px',
+                  fontWeight: 600,
+                  color: '#f8fafc',
+                  background: 'rgba(30, 27, 46, 0.78)',
+                  padding: '0 6px',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
                 }}
               >
                 {ml.workerId}
@@ -350,11 +357,18 @@ export default function Office() {
                     position: 'absolute',
                     left: `${(ud.x / layout.width) * 100}%`,
                     top: `${(ud.y / layout.height) * 100}%`,
-                    fontSize: '10px',
-                    color: isOnline ? '#e2e8f0' : '#64748b',
+                    fontSize: '11px',
+                    lineHeight: '14px',
+                    fontWeight: 600,
+                    color: isOnline ? '#f8fafc' : '#cbd5e1',
+                    background: isOnline ? 'rgba(30, 27, 46, 0.85)' : 'rgba(30, 27, 46, 0.55)',
+                    padding: '0 6px',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
                   }}
                 >
-                  <span>{ud.login}</span> {isOnline ? '🟢' : '░░'}
+                  <span>{ud.login}</span> {isOnline ? '🟢' : '· vắng'}
                 </div>
               );
             })}
