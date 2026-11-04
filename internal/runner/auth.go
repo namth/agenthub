@@ -30,7 +30,53 @@ func DefaultAuthPatterns() []string {
 		"authentication required",
 		"invalid api key",
 		"gh auth login",
+		"failed to authenticate",
+		"oauth",
+		"session expired",
+		"token expired",
+		"could not be refreshed",
 	}
+}
+
+func DefaultAuthProbes() map[string][]string {
+	return map[string][]string{
+		"CLAUDE":      {"claude", "-p", "Trả lời đúng một từ: OK"},
+		"ANTIGRAVITY": {"agy", "-p", "Trả lời đúng một từ: OK"},
+	}
+}
+
+func ParseProbeResult(exit int, output string, err error) (status, detail string) {
+	if err != nil {
+		d := err.Error()
+		if f := firstNonEmptyLine(output); f != "" {
+			d = f
+		}
+		return AuthUnknown, sanitizeDetail(d)
+	}
+
+	outLower := strings.ToLower(output)
+	for _, p := range DefaultAuthPatterns() {
+		if strings.Contains(outLower, strings.ToLower(p)) {
+			matchedLine := ""
+			for _, line := range strings.Split(output, "\n") {
+				if strings.Contains(strings.ToLower(line), strings.ToLower(p)) {
+					matchedLine = strings.TrimSpace(line)
+					break
+				}
+			}
+			if matchedLine == "" {
+				matchedLine = firstNonEmptyLine(output)
+			}
+			return AuthNeeds, sanitizeDetail(matchedLine)
+		}
+	}
+
+	if exit == 0 {
+		return AuthOK, ""
+	}
+
+	d := firstNonEmptyLine(output)
+	return AuthUnknown, sanitizeDetail(d)
 }
 
 var (
@@ -183,6 +229,12 @@ func (r *Runner) maybeSendRequestTask(ctx context.Context, agentID string) {
 			return
 		}
 		oldStatus := ag.authStatus
+		if r.cfg.AuthProbes != nil && len(r.cfg.AuthProbes[kind]) > 0 {
+			if oldStatus == AuthNeeds && newStatus == AuthOK {
+				r.mu.Unlock()
+				return
+			}
+		}
 		ag.authStatus = newStatus
 		ag.authDetail = newDetail
 		ag.authCheckedAt = r.now()
@@ -241,10 +293,14 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		ag, ok := r.agents[targetAgentID]
 		var kind string
 		var cmd []string
+		var probeCmd []string
 		if ok {
 			kind = ag.kind
 			if r.cfg.AuthChecks != nil {
 				cmd = r.cfg.AuthChecks[kind]
+			}
+			if r.cfg.AuthProbes != nil {
+				probeCmd = r.cfg.AuthProbes[kind]
 			}
 		}
 		r.mu.Unlock()
@@ -265,6 +321,18 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 			// Agent không có lệnh kiểm (agy) -> trả UNKNOWN và xoá trạng thái NEEDS_AUTH cục bộ
 			newStatus = AuthUnknown
 			newDetail = ""
+		}
+
+		if len(probeCmd) > 0 {
+			pCtx, cancelP := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
+			var pBuf bytes.Buffer
+			pExit, pErr := r.exec.Run(pCtx, "", probeCmd, &pBuf)
+			cancelP()
+			pStatus, pDetail := ParseProbeResult(pExit, pBuf.String(), pErr)
+			if pStatus == AuthOK || pStatus == AuthNeeds {
+				newStatus = pStatus
+				newDetail = pDetail
+			}
 		}
 
 		r.mu.Lock()
@@ -338,9 +406,10 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 
 	// 2. Mọi agent
 	type agentCheckInfo struct {
-		id   string
-		kind string
-		cmd  []string
+		id       string
+		kind     string
+		cmd      []string
+		probeCmd []string
 	}
 	r.mu.Lock()
 	var agentList []agentCheckInfo
@@ -349,7 +418,11 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		if r.cfg.AuthChecks != nil {
 			cmd = r.cfg.AuthChecks[ag.kind]
 		}
-		agentList = append(agentList, agentCheckInfo{id: id, kind: ag.kind, cmd: cmd})
+		var probeCmd []string
+		if r.cfg.AuthProbes != nil {
+			probeCmd = r.cfg.AuthProbes[ag.kind]
+		}
+		agentList = append(agentList, agentCheckInfo{id: id, kind: ag.kind, cmd: cmd, probeCmd: probeCmd})
 	}
 	r.mu.Unlock()
 
@@ -365,6 +438,18 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		} else {
 			st = AuthUnknown
 			dt = ""
+		}
+
+		if len(item.probeCmd) > 0 {
+			pCtx, cancelP := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
+			var pBuf bytes.Buffer
+			pExit, pErr := r.exec.Run(pCtx, "", item.probeCmd, &pBuf)
+			cancelP()
+			pStatus, pDetail := ParseProbeResult(pExit, pBuf.String(), pErr)
+			if pStatus == AuthOK || pStatus == AuthNeeds {
+				st = pStatus
+				dt = pDetail
+			}
 		}
 
 		r.mu.Lock()
@@ -500,10 +585,87 @@ func (r *Runner) performPeriodicAuthCheck(ctx context.Context) {
 			continue
 		}
 		oldStatus := ag.authStatus
+		if r.cfg.AuthProbes != nil && len(r.cfg.AuthProbes[item.kind]) > 0 {
+			if oldStatus == AuthNeeds && newStatus == AuthOK {
+				r.mu.Unlock()
+				continue
+			}
+		}
 		ag.authStatus = newStatus
 		ag.authDetail = newDetail
 		ag.authCheckedAt = r.now()
 		statusChanged := (newStatus != oldStatus)
+		canRequest := (oldStatus == AuthNeeds && newStatus != AuthNeeds && r.ghAuthStatus != AuthNeeds)
+		r.mu.Unlock()
+
+		if statusChanged {
+			payload := map[string]any{
+				"event":       "AGENT_AUTH",
+				"scope":       "agent",
+				"agent_id":    item.id,
+				"auth_status": newStatus,
+			}
+			if newDetail != "" {
+				payload["detail"] = newDetail
+			} else {
+				payload["detail"] = nil
+			}
+			r.send(payload)
+			r.writeStatus(true)
+		}
+
+		if canRequest {
+			r.maybeSendRequestTask(ctx, item.id)
+		}
+	}
+}
+
+func (r *Runner) performPeriodicAuthProbe(ctx context.Context) {
+	if r.cfg.AuthProbes == nil {
+		return
+	}
+
+	type agentProbeInfo struct {
+		id   string
+		kind string
+		cmd  []string
+	}
+	r.mu.Lock()
+	var toProbe []agentProbeInfo
+	for id, ag := range r.agents {
+		if ag.status != "BUSY" {
+			if cmd, ok := r.cfg.AuthProbes[ag.kind]; ok && len(cmd) > 0 {
+				toProbe = append(toProbe, agentProbeInfo{id: id, kind: ag.kind, cmd: cmd})
+			}
+		}
+	}
+	r.mu.Unlock()
+
+	for _, item := range toProbe {
+		probeCtx, cancel := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
+		var buf bytes.Buffer
+		exit, err := r.exec.Run(probeCtx, "", item.cmd, &buf)
+		cancel()
+		newStatus, newDetail := ParseProbeResult(exit, buf.String(), err)
+
+		// Brief: "Kết quả probe OK hoặc NEEDS_AUTH ghi đè kết quả lệnh kiểm; probe UNKNOWN giữ kết quả lệnh kiểm."
+		if newStatus == AuthUnknown {
+			continue
+		}
+
+		r.mu.Lock()
+		ag, ok := r.agents[item.id]
+		if !ok || ag.status == "BUSY" {
+			r.mu.Unlock()
+			continue
+		}
+		oldStatus := ag.authStatus
+		statusChanged := (newStatus != oldStatus)
+		if statusChanged {
+			ag.authStatus = newStatus
+			ag.authDetail = newDetail
+			ag.authCheckedAt = r.now()
+		}
 		canRequest := (oldStatus == AuthNeeds && newStatus != AuthNeeds && r.ghAuthStatus != AuthNeeds)
 		r.mu.Unlock()
 

@@ -243,6 +243,7 @@ func Main(args []string) int {
 		Agents:          agents,
 		ExhaustPatterns: exhaustPattern,
 		AuthChecks:      DefaultAuthChecks(),
+		AuthProbes:      DefaultAuthProbes(),
 		OpenPR:          openPR,
 		GitFor:          NewRepoCache(homeDir, func(r string) string { return "https://github.com/" + r + ".git" }, exec),
 		NoUpdate:        noUpdate,
