@@ -21,6 +21,7 @@ export const NAV: NavItem[] = [
   { code: 'SCR-06', label: 'Live terminal', path: '/fleet/:id/terminal', roles: ['ADMIN'], inSidebar: false },
   { code: 'SCR-08', label: 'Văn phòng', path: '/office', roles: ['ADMIN', 'PARTNER'], inSidebar: true, requiresOffice: true },
   { code: 'SCR-07', label: 'Cài đặt', path: '/settings', roles: ['ADMIN'], inSidebar: true },
+  { code: 'SCR-12', label: 'Hồ sơ', path: '/profile', roles: ['ADMIN', 'PARTNER'], inSidebar: false },
 ];
 
 export function visibleNav(role: Role, officeEnabled: boolean): NavItem[] {
