@@ -1,0 +1,17 @@
+{
+  "id": "TASK-023",
+  "title": "Thêm máy: mã tham gia, /api/fleet/join, install.sh, tải binary, Máy của tôi (API)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T11:56:39",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-023-join-machine/verify.sh",
+    "internal/machines/machines_test.go"
+  ]
+}
