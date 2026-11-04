@@ -1,6 +1,6 @@
 # FEAT-04: Đa dự án song song
 
-> Trạng thái: SPEC_APPROVED (2026-11-04) · Quyết định: DEC-14, DEC-15, DEC-16, DEC-17
+> Trạng thái: DONE (2026-11-04) · Quyết định: DEC-14, DEC-15, DEC-16, DEC-17
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 Một AgentHub quản lý nhiều repo GitHub cùng owner (`namth`). Mỗi repo là một **dự án**: Kanban, task, issue, PR, webhook riêng; dàn máy và trưởng phòng dùng chung, chia việc công bằng giữa các dự án.

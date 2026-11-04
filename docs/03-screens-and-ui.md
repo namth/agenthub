@@ -13,9 +13,9 @@
 | **SCR-05** | Quản Trị Cụm Máy (Fleet) | Chỉ Admin | `/fleet` | `src/pages/Fleet.tsx` | Danh sách máy và agent: Tên, OS, kết nối, từng agent (Claude/Antigravity) với trạng thái IDLE/BUSY/COOLDOWN + đếm ngược, thẻ Lead (epoch, gia hạn), nút Trao/Thu hồi vai, drawer sửa ưu tiên & hạn mềm, nút xem Log (FEAT-01). Design: SPEC_ONLY · Code: DONE |
 | **SCR-06** | Live Terminal Console | Chỉ Admin | `/fleet/:id/terminal` | `src/pages/LiveTerminal.tsx` | Màn hình đen giả lập terminal (xterm.js), hiển thị ANSI logs real-time từ máy con. |
 | **SCR-07** | Cài Đặt Hệ Thống | Chỉ Admin | `/settings` | `src/pages/Settings.tsx` | Cấu hình Telegram Bot Token, Chat ID, GitHub Repo kết nối; công tắc "Bật văn phòng ảo" (FEAT-02). |
-| **SCR-09** | Dự Án | Chỉ owner | `/projects` | `src/pages/Projects.tsx` | Danh sách dự án (repo, webhook, task mở, weight, max_parallel, lưu trữ) + repo chưa thêm (FEAT-04). Design: SPEC_ONLY · Code: TODO |
-| **SCR-10** | Đóng Góp | Mọi người dùng (theo quyền) | `/contributions` | `src/pages/Contributions.tsx` | Tổng hợp theo partner/dự án + dòng thời gian (FEAT-05, DEC-21). Design: SPEC_ONLY · Code: TODO |
-| **SCR-11** | Máy Của Tôi | Mọi người dùng | `/my/machines` | `src/pages/MyMachines.tsx` | Máy của mình, thêm máy (lệnh + hướng dẫn agent), tạm dừng/gỡ, chọn dự án (FEAT-05). Design: SPEC_ONLY · Code: TODO |
+| **SCR-09** | Dự Án | Chỉ owner | `/projects` | `src/pages/Projects.tsx` | Danh sách dự án (repo, webhook, task mở, weight, max_parallel, lưu trữ) + repo chưa thêm (FEAT-04). Design: SPEC_ONLY · Code: DONE |
+| **SCR-10** | Đóng Góp | Mọi người dùng (theo quyền) | `/contributions` | `src/pages/Contributions.tsx` | Tổng hợp theo partner/dự án + dòng thời gian (FEAT-05, DEC-21). Design: SPEC_ONLY · Code: DONE |
+| **SCR-11** | Máy Của Tôi | Mọi người dùng | `/my/machines` | `src/pages/MyMachines.tsx` | Máy của mình, thêm máy (lệnh + hướng dẫn agent), tạm dừng/gỡ, chọn dự án (FEAT-05). Design: SPEC_ONLY · Code: DONE |
 | **SCR-08** | Văn Phòng Ảo | Chỉ Admin (khi bật) | `/office` | `src/pages/Office.tsx` | Văn phòng pixel-art chỉ quan sát: dãy bàn theo máy, ghế Trưởng phòng theo lead, phòng nghỉ cho COOLDOWN, hoạt cảnh giao/nộp/review/chuyển giao (FEAT-02). Design: SPEC_ONLY · Code: DONE |
 
 ---

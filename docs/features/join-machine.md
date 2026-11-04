@@ -1,6 +1,6 @@
 # FEAT-05: Thêm máy bằng một lệnh, máy của partner, trang Đóng góp
 
-> Trạng thái: SPEC_APPROVED (2026-11-04) · Quyết định: DEC-18, DEC-19, DEC-20, DEC-21
+> Trạng thái: DONE (2026-11-04) · Quyết định: DEC-18, DEC-19, DEC-20, DEC-21
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 Bất kỳ người dùng đã đăng nhập (owner hoặc partner) thêm được máy của mình vào AgentHub chỉ bằng một lệnh, hoặc dán một khối hướng dẫn cho agent AI đang chạy trên máy đó để nó tự làm. Quản trị thấy rõ máy thuộc ai, đang chạy dự án gì; trang Đóng góp tổng hợp công việc theo partner và theo dự án.
