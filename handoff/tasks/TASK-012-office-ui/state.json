@@ -1,7 +1,7 @@
 {
   "id": "TASK-012",
   "title": "Giao diện SCR-08 Văn phòng ảo (canvas động từ SSE)",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "cf65c812-b151-434a-a0cf-7534ef0fd37c",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T09:11:27",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:12:41",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
