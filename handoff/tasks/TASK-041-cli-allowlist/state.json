@@ -1,0 +1,20 @@
+{
+  "id": "TASK-041",
+  "title": "Allowlist lệnh theo dự án, runner cấp quyền CLI không bỏ qua quyền",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:36:45",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-041-cli-allowlist/verify.sh",
+    "internal/runner/allowlist_test.go",
+    "internal/pipeline/allowlist_test.go",
+    "internal/gateway/extras_test.go",
+    "internal/projects/allowlist_test.go"
+  ]
+}
