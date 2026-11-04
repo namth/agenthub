@@ -1,0 +1,19 @@
+{
+  "id": "TASK-020",
+  "title": "Dự án: liệt kê repo, thêm dự án + webhook, vai theo dự án, đăng nhập đa dự án",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T11:52:41",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-020-projects/verify.sh",
+    "internal/projects/projects_test.go",
+    "internal/auth/multi_test.go",
+    "internal/auth/auth_test.go"
+  ]
+}
