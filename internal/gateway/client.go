@@ -332,6 +332,14 @@ func (c *clientConn) handleRequestTask(env incomingEnvelope) {
 			payload["repo"] = repo
 		}
 	}
+	if c.hub.payloadExtrasFn != nil {
+		extras := c.hub.payloadExtrasFn(*asg)
+		for k, v := range extras {
+			if _, exists := payload[k]; !exists {
+				payload[k] = v
+			}
+		}
+	}
 
 	resp := map[string]any{
 		"event":         "ASSIGN_TASK",

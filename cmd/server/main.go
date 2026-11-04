@@ -172,6 +172,7 @@ func main() {
 			}
 		}),
 		gateway.WithPrompt(pl.PromptFor),
+		gateway.WithPayloadExtras(pl.PayloadFor),
 		gateway.WithSubmitHook(func(workerID, assignmentID, prURL string, result json.RawMessage) {
 			if err := pl.OnSubmitted(context.Background(), workerID, assignmentID, prURL, result); err != nil {
 				log.Printf("pipeline: %s: %v", assignmentID, err)
