@@ -1,0 +1,17 @@
+{
+  "id": "TASK-040",
+  "title": "Web: tab Làm rõ ở SCR-04 và nhãn Kanban",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:48:19",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-040-web-clarify-tab/verify.sh",
+    "web/src/pages/clarify.test.tsx"
+  ]
+}
