@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"syscall"
+	"time"
 )
 
 type Executor interface {
@@ -21,6 +23,10 @@ func (ExecExecutor) Run(ctx context.Context, dir string, argv []string, out io.W
 	cmd.Dir = dir
 	cmd.Stdout = out
 	cmd.Stderr = out
+	// CLI (claude/agy) tự sinh tiến trình con: chạy trong nhóm riêng và giết cả nhóm khi huỷ.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 2 * time.Second
 
 	err := cmd.Run()
 	if ctx.Err() != nil {
