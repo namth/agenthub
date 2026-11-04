@@ -280,6 +280,9 @@ func (c *clientConn) handleLogChunk(env incomingEnvelope) {
 		c.handleDomainError(err, env)
 		return
 	}
+	if c.hub.logSink != nil {
+		c.hub.logSink(c.workerID, assignmentID, env.Chunk)
+	}
 }
 
 func (c *clientConn) handleTaskSubmitted(env incomingEnvelope) {

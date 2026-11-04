@@ -20,6 +20,7 @@ type Hub struct {
 
 	promptFn   func(dispatcher.Assignment) string
 	submitHook func(workerID, assignmentID, prURL string, result json.RawMessage)
+	logSink    func(workerID, assignmentID, chunk string)
 
 	mu      sync.Mutex
 	clients map[string]*clientConn
@@ -35,6 +36,12 @@ func WithPrompt(fn func(dispatcher.Assignment) string) Option {
 func WithSubmitHook(fn func(workerID, assignmentID, prURL string, result json.RawMessage)) Option {
 	return func(h *Hub) {
 		h.submitHook = fn
+	}
+}
+
+func WithLogSink(fn func(workerID, assignmentID, chunk string)) Option {
+	return func(h *Hub) {
+		h.logSink = fn
 	}
 }
 
