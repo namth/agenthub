@@ -87,6 +87,15 @@
 - **Quyết định:** `backlog` = PENDING_APPROVAL · `planning` = PLANNING, READY · `in_progress` = IN_PROGRESS · `review` = WAITING_QA, QA_PASSED · `done` = DONE. Task `REJECTED` không hiện trên Kanban (xem ở chi tiết/lọc).
 - **Kèm theo:** Partner chỉ thấy task gốc (`parent_id IS NULL`), không có `branch_name`, `assigned_worker_id`. Tra quyền collaborator bằng token server, OAuth người dùng chỉ xin `read:user`.
 
+## DEC-12: Agent trả kết quả có cấu trúc qua file `result.json`; server có bộ pipeline
+- **Ngày:** 2026-11-04 · **Trạng thái:** CHỐT
+- **Quyết định:**
+  - Runner tạo thư mục tạm cho mỗi assignment, thêm vào prompt dòng `AGENTHUB_RESULT_FILE=<đường dẫn tuyệt đối>`; agent ghi JSON vào đó. Runner đọc, kiểm (object JSON, ≤ 64 KB) rồi gửi trong `TASK_SUBMITTED.result`.
+  - Schema theo loại job: `SPEC` → `{"subtasks":[{"title","description","dod"}]}` (1–20 mục, bắt buộc); `QA_REVIEW` → `{"verdict":"PASS"|"CHANGES","comments":"..."}` (bắt buộc); `CODE` → `{"summary":"..."}` (tuỳ chọn).
+  - Job `CODE` thành công: runner commit, push rồi mở PR (`gh pr create`), gửi `pr_url`.
+  - Server: package `internal/pipeline` sinh prompt cho từng assignment (gateway gắn vào `ASSIGN_TASK.payload.prompt`) và chuyển trạng thái task theo `docs/12`: SPEC → tạo sub-task (issue GitHub + job CODE), task cha `READY`; CODE → `WAITING_QA` + job `QA_REVIEW`; QA `PASS` → `QA_PASSED`; QA `CHANGES` → `READY` + job CODE mới cùng nhánh, nhận xét ghi vào `lead_journal` và đưa vào prompt lần sau. Kết quả sai schema → job `REPLAN` cho lead.
+- **Phương án loại:** khối JSON cuối stdout (dễ vỡ), agent tự gọi API (phải cấp token cho agent).
+
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.
 - **FEAT-04 Đa dự án song song:** GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.
