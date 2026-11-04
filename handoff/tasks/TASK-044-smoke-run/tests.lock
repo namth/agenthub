@@ -1,0 +1,3 @@
+ab6349db03ee208ceb009ccb73e06d0c884302f2a7cdf0276fa5f8824de71c19  handoff/tasks/TASK-044-smoke-run/verify.sh
+de2c36681835db5771ddb2cb8c9a80e8a7fa4fcb1d30852b1765f0a2c7a0c62b  internal/smoke/smoke_test.go
+bd57cffc545f7c1c01f65b8650fda33a2635524adab13cd37a44aba2caf0ec45  web/src/pages/projects_ops.test.tsx
