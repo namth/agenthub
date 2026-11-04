@@ -1,0 +1,17 @@
+{
+  "id": "TASK-005",
+  "title": "Đăng nhập GitHub OAuth, phiên JWT, RBAC middleware (TASK-05 phần auth)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T08:37:29",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-005-auth-github/verify.sh",
+    "internal/auth/auth_test.go"
+  ]
+}
