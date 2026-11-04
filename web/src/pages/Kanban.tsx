@@ -175,12 +175,15 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
 
       {actionError && <ErrorBanner message={actionError} />}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+      <div
+        data-testid="kanban-board"
+        className="flex gap-4 overflow-x-auto snap-x pb-4 md:grid md:grid-cols-5 md:overflow-visible"
+      >
         {columns.map((column) => (
           <div
             key={column.key}
             data-testid={`column-${column.key}`}
-            className="flex flex-col rounded-xl border border-slate-200 bg-slate-100/70 p-3 shadow-xs"
+            className="flex w-64 shrink-0 snap-start flex-col rounded-xl border border-slate-200 bg-slate-100/70 p-3 shadow-xs md:w-auto"
           >
             <div className="mb-3 flex items-center justify-between px-1">
               <h2 className="text-sm font-semibold text-slate-700">{column.title}</h2>

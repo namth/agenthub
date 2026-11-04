@@ -1,17 +1,33 @@
 {
   "id": "TASK-047",
   "title": "Web dùng được trên điện thoại 375px",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "5dd1e35a-5efa-4ad1-ae5c-be534585a942",
   "history": [
     {
       "at": "2026-11-04T21:29:04",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T21:35:43",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-medium)"
+    },
+    {
+      "at": "2026-11-04T21:35:56",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T21:43:37",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-047-web-responsive/verify.sh",
     "web/src/layout/responsive.test.tsx"
-  ]
+  ],
+  "via": "agy"
 }

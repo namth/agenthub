@@ -222,7 +222,8 @@ export default function Office() {
       {error && <ErrorBanner message={error} />}
 
       {/* Canvas container with overlay */}
-      <div className="relative inline-block overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
+      <div className="overflow-x-auto max-w-full">
+        <div className="relative inline-block overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
         <canvas
           ref={canvasRef}
           data-testid="office-canvas"
@@ -402,6 +403,7 @@ export default function Office() {
             {hoveredInfo.text}
           </div>
         )}
+      </div>
       </div>
 
       {/* Status bar */}
