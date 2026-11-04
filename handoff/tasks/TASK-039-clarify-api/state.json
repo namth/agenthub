@@ -1,0 +1,18 @@
+{
+  "id": "TASK-039",
+  "title": "API làm rõ: clarify, tự quyết, /answer GitHub, nút Telegram",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:57:54",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-039-clarify-api/verify.sh",
+    "internal/tasks/clarify_test.go",
+    "internal/telegram/clarify_test.go"
+  ]
+}
