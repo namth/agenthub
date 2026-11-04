@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
 
@@ -254,15 +255,23 @@ export default function Fleet() {
                   {worker.os}
                 </span>
               </div>
-              <span
-                className={`rounded px-2.5 py-0.5 text-xs font-semibold ${
-                  worker.conn_status === 'ONLINE'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                {worker.conn_status}
-              </span>
+              <div className="flex items-center gap-3">
+                <Link
+                  to={`/fleet/${worker.id}/terminal`}
+                  className="rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 shadow-xs hover:bg-slate-50 hover:text-indigo-700"
+                >
+                  Xem log
+                </Link>
+                <span
+                  className={`rounded px-2.5 py-0.5 text-xs font-semibold ${
+                    worker.conn_status === 'ONLINE'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {worker.conn_status}
+                </span>
+              </div>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
