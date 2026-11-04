@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api, ApiError } from '../api/client';
+import ClarifyPanel, { type ClarifyData } from '../components/ClarifyPanel';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
 import type { Role } from '../nav';
 
@@ -31,6 +32,7 @@ export interface TaskDetailProps {
 export const STATUS_LABELS: Record<string, string> = {
   PENDING_APPROVAL: 'Chờ duyệt',
   PLANNING: 'Lập kế hoạch',
+  WAITING_USER: 'Chờ làm rõ',
   READY: 'Sẵn sàng',
   IN_PROGRESS: 'Đang làm',
   WAITING_QA: 'Chờ kiểm định',
@@ -42,6 +44,7 @@ export const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   PENDING_APPROVAL: 'bg-amber-100 text-amber-800 border-amber-200',
   PLANNING: 'bg-sky-100 text-sky-800 border-sky-200',
+  WAITING_USER: 'bg-amber-100 text-amber-800 border-amber-200',
   READY: 'bg-indigo-100 text-indigo-800 border-indigo-200',
   IN_PROGRESS: 'bg-blue-100 text-blue-800 border-blue-200',
   WAITING_QA: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -53,11 +56,26 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
   const { id } = useParams<{ id: string }>();
   const [task, setTask] = useState<TaskDetailData | null>(null);
+  const [clarifications, setClarifications] = useState<ClarifyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+
+  const fetchClarifications = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await api.get<ClarifyData>(`/api/tasks/${id}/clarifications`);
+      if (data && Array.isArray(data.rounds) && data.rounds.length > 0) {
+        setClarifications(data);
+      } else {
+        setClarifications(null);
+      }
+    } catch {
+      setClarifications(null);
+    }
+  }, [id]);
 
   const fetchTask = useCallback(async () => {
     if (!id) return;
@@ -67,6 +85,11 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
     try {
       const data = await api.get<TaskDetailData>(`/api/tasks/${id}`);
       setTask(data);
+      if (data.status !== 'PENDING_APPROVAL') {
+        await fetchClarifications();
+      } else {
+        setClarifications(null);
+      }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
@@ -80,7 +103,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchClarifications]);
 
   useEffect(() => {
     fetchTask();
@@ -232,6 +255,18 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
       </div>
 
       {actionError && <ErrorBanner message={actionError} onRetry={() => setActionError(null)} />}
+
+      {clarifications && clarifications.rounds && clarifications.rounds.length > 0 && (
+        <ClarifyPanel
+          taskId={task.id}
+          taskStatus={task.status}
+          data={clarifications}
+          onReload={async () => {
+            await fetchTask();
+            await fetchClarifications();
+          }}
+        />
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
         <h2 className="mb-2 text-sm font-semibold tracking-wider text-slate-500 uppercase">Mô tả chi tiết</h2>

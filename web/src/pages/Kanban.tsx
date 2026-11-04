@@ -13,6 +13,7 @@ export interface Task {
   github_issue_id?: number | null;
   parent_id?: string | null;
   created_at?: string;
+  clarify_pending?: number | null;
 }
 
 export interface Column {
@@ -214,6 +215,14 @@ export default function Kanban({ role = 'PARTNER' }: { role?: Role }) {
                   {selectedProjectId === ALL_PROJECTS && task.project_id && (
                     <div className="mt-1 text-xs font-medium text-slate-600">
                       {projects.find((p) => p.id === task.project_id)?.github_repo || task.project_id}
+                    </div>
+                  )}
+
+                  {task.status === 'WAITING_USER' && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        Cần làm rõ ({task.clarify_pending ?? 0} câu)
+                      </span>
                     </div>
                   )}
 
