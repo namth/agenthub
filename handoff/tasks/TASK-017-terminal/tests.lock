@@ -1,0 +1,6 @@
+57d26767ffdd6efa5474fbd5c9ab825026c46f80cef5444fef07c26b7f93dbd1  handoff/tasks/TASK-017-terminal/verify.sh
+b737d28656bd61fd722f88610338cec64d75796aa7478c11b06d8e39a9661e6b  web/src/pages/terminal.test.tsx
+5ea63284f895c8fcb086de6fac94324bf3fb96b7f83e5d9426922846d306f9bf  web/src/pages/detail.test.tsx
+e555d7c0d384a53d4ef32ef02ee80342ecc6b1ddf81346c1a2423b02e840ee70  web/src/pages/screens.test.tsx
+53a09f1b9f79b8cbde9d608c362f88de07a6df4e605a2507f68e7daaedb3634a  web/src/office/office.test.tsx
+372d73a7fae549ae7c364c103013b9b8ed261757bda143efa1ebea990415e544  web/src/nav.test.ts

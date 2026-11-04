@@ -1,0 +1,21 @@
+{
+  "id": "TASK-017",
+  "title": "Giao diện SCR-06 Live terminal (log ANSI theo máy)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:31:47",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-017-terminal/verify.sh",
+    "web/src/pages/terminal.test.tsx",
+    "web/src/pages/detail.test.tsx",
+    "web/src/pages/screens.test.tsx",
+    "web/src/office/office.test.tsx",
+    "web/src/nav.test.ts"
+  ]
+}
