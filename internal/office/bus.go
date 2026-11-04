@@ -143,6 +143,24 @@ func (b *Bus) Notify(e dispatcher.Event) {
 			Task: e.TaskID,
 		})
 
+	case dispatcher.EvAgentAuth:
+		if e.AuthStatus == "NEEDS_AUTH" || e.PrevAuthStatus == "NEEDS_AUTH" {
+			b.Emit(Event{
+				Who:  e.AgentID,
+				Type: "auth",
+				Text: e.AuthStatus,
+			})
+		}
+
+	case dispatcher.EvWorkerAuth:
+		if e.AuthStatus == "NEEDS_AUTH" || e.PrevAuthStatus == "NEEDS_AUTH" {
+			b.Emit(Event{
+				Who:  e.WorkerID,
+				Type: "auth",
+				Text: e.AuthStatus,
+			})
+		}
+
 	default:
 		// còn lại bỏ qua
 	}
