@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Văn phòng ảo</title>
+<style>
+  :root { --bg:#191b26; --panel:#232636; --line:#33374b; --text:#e9e7f1; --muted:#9a9db4; --test:#a99bff; --ask:#f2a541; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif; display:flex; height:100vh; overflow:hidden; }
+  #stage { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; padding:12px; }
+  #wrap { position:relative; }
+  canvas { display:block; image-rendering:pixelated; border-radius:6px; box-shadow:0 12px 40px #0009; }
+  #ov { position:absolute; inset:0; pointer-events:none; overflow:visible; }
+  .tag, .bub, .sign { position:absolute; left:0; top:0; white-space:nowrap; will-change:transform; }
+  .tag { font-size:11px; font-weight:600; padding:0 6px; border-radius:8px; background:#000b; color:#fff; }
+  .bub { max-width:240px; overflow:hidden; text-overflow:ellipsis; background:#fff; color:#1d1d24; padding:3px 8px; border-radius:8px; font-size:12px; box-shadow:0 2px 8px #0006; opacity:0; transition:opacity .25s; border:2px solid transparent; }
+  .bub.on { opacity:1; }
+  .bub.test { border-color:var(--test); background:#f3f0ff; }
+  .bub.ask { border-color:var(--ask); background:#fff6e8; }
+  .sign { font-size:11px; padding:2px 8px; border-radius:6px; background:#0d1520d9; color:#cfe3ff; border:1px solid #3d5a80; max-width:60%; overflow:hidden; text-overflow:ellipsis; }
+  .sign i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; background:#e5484d; }
+  .sign.on i { background:#3fd17a; box-shadow:0 0 6px #3fd17a; }
+  aside { width:330px; flex:none; background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  header { padding:12px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+  header h1 { font-size:15px; margin:0; flex:1; }
+  #conn { font-size:11px; color:var(--muted); display:flex; align-items:center; gap:5px; }
+  #conn i { width:8px; height:8px; border-radius:50%; background:#e5484d; display:inline-block; }
+  #conn.ok i { background:#3fa66b; }
+  section { padding:10px 14px; border-bottom:1px solid var(--line); }
+  section h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; font-weight:600; }
+  .person { display:grid; grid-template-columns:10px auto 1fr; align-items:center; column-gap:8px; padding:3px 0; }
+  .person b { font-weight:600; }
+  .person span { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .person small { grid-column:2 / 4; color:#7f9cc4; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .person .testing { color:var(--test); }
+  .person .asking, #log div.ask { color:var(--ask); }
+  .dot { width:10px; height:10px; border-radius:3px; flex:none; }
+  .task { display:flex; align-items:center; gap:6px; padding:3px 0; }
+  .task code { font-size:11px; color:var(--muted); flex:none; }
+  .task .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pill { font-size:10px; padding:1px 6px; border-radius:6px; color:#111; flex:none; }
+  .empty { color:var(--muted); font-style:italic; }
+  #logbox { flex:1; overflow:auto; min-height:120px; }
+  #log div { padding:2px 0; color:var(--muted); font-size:12px; }
+  #log div b { color:var(--text); font-weight:600; }
+  #log div.test { color:var(--test); }
+  #log time { font-variant-numeric:tabular-nums; margin-right:6px; opacity:.7; }
+  @media (max-width:820px) {
+    body { flex-direction:column; height:auto; overflow:auto; }
+    #stage { height:62vh; padding:16px; }
+    aside { width:auto; border-left:0; border-top:1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="stage"><div id="wrap"><canvas id="cv"></canvas><div id="ov"></div></div></div>
+<aside>
+  <header><h1>Văn phòng ảo</h1><div id="conn"><i></i><span>Đang kết nối…</span></div></header>
+  <section><h2>Nhân sự</h2><div id="people"></div></section>
+  <section><h2>Bảng công việc</h2><div id="tasks"></div></section>
+  <section id="logbox"><h2>Nhật ký</h2><div id="log"></div></section>
+</aside>
+<script>
+'use strict';
+// ---------- Bố cục (đơn vị: pixel logic của canvas 384×272) ----------
+// Khu chung (y < 198) và phòng giám đốc (x > 272) đi qua lối giữa y = 112;
+// khu máy từ xa (y > 206) đi qua lối dưới y = 262, nối với khu chung bằng cửa ở x = 124.
+const W = 384, H = 272, SPEED = 64;
+const AISLE = { main: 112, annex: 262 }, DOOR_X = 124, ANNEX_TOP = 206;
+const zoneOf = (p) => (p.y > ANNEX_TOP - 3 ? 'annex' : 'main');
+const COFFEE = { x: 24, y: 70 };
+const CABLE = { x1: 28, x2: 150, y: 240 };
+const P = {
+  giamdoc:     { name: 'Anh Nam', role: 'Giám đốc', shirt: '#2f3550', pants: '#1c1e29', hair: '#8d8d8d', skin: '#f1c7a0', tie: '#c0392b',
+                 desk: { x: 310, y: 128, w: 48 }, seat: { x: 334, y: 154 }, door: { x: 334, y: 154 }, visit: { x: 302, y: 152 }, lamp: true },
+  truongphong: { name: 'Claude', role: 'Trưởng phòng', shirt: '#d97757', pants: '#3b3a48', hair: '#6b4226', skin: '#f3cfa8', glasses: true,
+                 desk: { x: 190, y: 56, w: 40 }, seat: { x: 210, y: 82 }, door: { x: 210, y: 82 }, visit: { x: 240, y: 84 } },
+  agy1:        { name: 'INOVA Antigravity', role: 'Nhân viên', shirt: '#3fa66b', pants: '#2c3e50', hair: '#1f1f1f', skin: '#e8b88f', hood: true,
+                 desk: { x: 30, y: 140, w: 40 }, seat: { x: 50, y: 166 }, door: { x: 76, y: 166 }, visit: { x: 80, y: 166 } },
+  agy2:        { name: 'Nam Antigravity', role: 'Nhân viên từ xa', shirt: '#4a7fd4', pants: '#34344a', hair: '#b5651d', skin: '#f6d3b3', remote: true,
+                 desk: { x: 150, y: 222, w: 40 }, seat: { x: 170, y: 248 }, door: { x: 196, y: 248 }, visit: { x: 200, y: 248 } },
+};
+const ORDER = ['giamdoc', 'truongphong', 'agy1', 'agy2'];
+const STATUS = ['todo', 'doing', 'review', 'done'];
+const STATUS_UI = { todo: ['Chờ nhận', '#9aa0b5'], doing: ['Đang làm', '#f2a541'], review: ['Chờ duyệt', '#a99bff'], done: ['Xong', '#5cc98a'] };
+const ONLINE_MS = 45000;
+
+const shade = (hex, k) => '#' + hex.slice(1).match(/../g).map((h) => Math.max(0, Math.min(255, Math.round(parseInt(h, 16) * k))).toString(16).padStart(2, '0')).join('');
+ORDER.forEach((id, i) => { P[id].dark = shade(P[id].shirt, 0.75); P[id].seed = i * 5; });
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+const R = (c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+
+// ---------- Trạng thái ----------
+let C, tasks, logItems, packets = [], presence = {}, replayNow = null;
+const now = () => replayNow ?? Date.now();
+
+function reset() {
+  C = {};
+  for (const id of ORDER) {
+    const p = P[id];
+    C[id] = { id, p, x: p.seat.x, y: p.seat.y, atSeat: true, walking: false, facing: 'back', state: 'idle', carry: null,
+              icon: '', iconUntil: 0, q: [], cur: null, bubble: null, idleSince: now(), lastWork: 0, coffeeDone: false,
+              pendingWork: null, testing: null, meeting: false, interviewAt: 0, task: null, present: !p.remote };
+  }
+  tasks = {};
+  logItems = [];
+  packets = [];
+}
+
+// Nhân sự máy từ xa có mặt khi máy đó còn báo về trong 45 giây gần nhất.
+function updatePresence() {
+  for (const id of ORDER) {
+    if (!P[id].remote) continue;
+    const info = presence[id], c = C[id];
+    const online = !!info && Date.now() - info.seenAt < ONLINE_MS;
+    if (online !== c.present) { c.present = online; dirty.people = dirty.sign = true; }
+  }
+}
+
+// ---------- Hàng đợi hành động của từng người ----------
+const enq = (c, acts) => c.q.push(...acts);
+
+function setState(c, s) {
+  c.state = s;
+  if (s === 'idle') c.idleSince = now();
+  if (s === 'work' || s === 'testing') { c.lastWork = now(); c.coffeeDone = false; }
+}
+const setBubble = (c, text, ms, kind = '') => { if (text) c.bubble = { text, kind, until: Date.now() + ms }; };
+const setIcon = (c, icon, ms = 0) => { c.icon = icon; c.iconUntil = ms ? Date.now() + ms : 0; };
+
+function spotOf(c, dest) {
+  if (dest === 'seat') return [c.p.door, c.p.seat];
+  if (dest === 'coffee') return [COFFEE, COFFEE];
+  return [P[dest].visit, P[dest].visit];
+}
+
+// Ra khỏi chỗ ngồi → lối đi của khu mình → (qua cửa nếu đổi khu) → lối đi khu đích → điểm vào → đích.
+function routeTo(c, dest) {
+  if (dest === 'seat' && c.atSeat) return [];
+  const [entry, end] = spotOf(c, dest);
+  const from = c.atSeat ? c.p.door : { x: c.x, y: c.y };
+  const z1 = zoneOf(from), z2 = zoneOf(entry);
+  const pts = [from, { x: from.x, y: AISLE[z1] }];
+  if (z1 !== z2) pts.push({ x: DOOR_X, y: AISLE[z1] }, { x: DOOR_X, y: AISLE[z2] });
+  pts.push({ x: entry.x, y: AISLE[z2] }, entry, end);
+  const out = [];
+  let px = c.x, py = c.y;
+  for (const q of pts) if (q.x !== px || q.y !== py) { out.push({ x: q.x, y: q.y }); px = q.x; py = q.y; }
+  return out;
+}
+
+function apply(c, a, live) {
+  if (a.k === 'say') { if (live) setBubble(a.who ? C[a.who] : c, a.text, a.ms, a.kind); }
+  else if (a.k === 'set') {
+    if ('state' in a) setState(c, a.state);
+    if ('carry' in a) c.carry = a.carry;
+    if ('icon' in a) setIcon(c, a.icon);
+    if ('facing' in a) c.facing = a.facing;
+  } else if (a.k === 'fn') a.f(live);
+  else if (a.k === 'go') {
+    const end = spotOf(c, a.to)[1];
+    c.x = end.x; c.y = end.y; c.atSeat = a.to === 'seat'; c.walking = false;
+  }
+}
+
+function step(c, dt) {
+  if (c.iconUntil && Date.now() > c.iconUntil) setIcon(c, '');
+  if (!c.cur) {
+    if (!c.q.length) {
+      if (c.pendingWork) { const e = c.pendingWork; c.pendingWork = null; doWork(c, e, true); }
+      return idleLogic(c);
+    }
+    c.cur = c.q.shift();
+    c.cur.t = 0;
+    if (c.cur.k === 'go') { c.cur.pts = routeTo(c, c.cur.to); if (c.cur.pts.length) c.atSeat = false; }
+  }
+  const a = c.cur;
+  if (a.k === 'go') {
+    let move = SPEED * dt;
+    while (move > 0 && a.pts.length) {
+      const t = a.pts[0], dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy);
+      c.facing = dy < -0.01 ? 'back' : 'front';
+      if (d <= move) { c.x = t.x; c.y = t.y; move -= d; a.pts.shift(); }
+      else { c.x += (dx / d) * move; c.y += (dy / d) * move; move = 0; }
+    }
+    c.walking = a.pts.length > 0;
+    if (!c.walking) { c.atSeat = a.to === 'seat'; c.facing = c.atSeat ? 'back' : 'front'; c.cur = null; }
+  } else if (a.k === 'wait') {
+    a.t += dt * 1000;
+    if (a.t >= a.ms) c.cur = null;
+  } else {
+    apply(c, a, true);
+    c.cur = null;
+  }
+}
+
+// Chạy hết hàng đợi ngay lập tức (khi dựng lại từ lịch sử hoặc khi tab quay lại).
+function flush(c) {
+  let guard = 0;
+  while ((c.cur || c.q.length) && guard++ < 1000) {
+    const a = c.cur || c.q.shift();
+    c.cur = null;
+    if (a.k !== 'wait') apply(c, a, false);
+  }
+  c.walking = false;
+  if (c.pendingWork) { const e = c.pendingWork; c.pendingWork = null; doWork(c, e, false); flush(c); }
+  if (c.testing) { const v = P[c.testing.owner].visit; c.x = v.x; c.y = v.y; c.atSeat = false; c.facing = 'back'; return; }
+  if (c.meeting) { const v = P.giamdoc.visit; c.x = v.x; c.y = v.y; c.atSeat = false; c.facing = 'front'; return; }
+  if (!c.atSeat) apply(c, { k: 'go', to: 'seat' }, false);
+  c.facing = 'back';
+}
+
+function idleLogic(c) {
+  if (c.id === 'giamdoc' || !c.present) return;
+  const t = now();
+  if (c.testing && t - c.lastWork > 120000) endTesting(c); // không thấy kết luận nghiệm thu thì tự về bàn
+  // Nhân sự còn task đang làm (đã nhận, chưa nộp) thì vẫn là đang làm dù lâu không sửa file (đang nghĩ, chạy test…).
+  const busyTask = c.id.startsWith('agy') && tasks[c.task]?.status === 'doing';
+  if (c.state === 'work' && t - c.lastWork > 90000 && !busyTask) setState(c, 'idle');
+  if (c.state === 'idle' && c.atSeat && !c.icon && !c.coffeeDone && t - c.idleSince > 25000 && !c.p.remote) {
+    c.coffeeDone = true;
+    enq(c, [
+      { k: 'say', text: '☕ Đi pha cà phê', ms: 2000, coffee: true },
+      { k: 'go', to: 'coffee', coffee: true },
+      { k: 'set', state: 'coffee', carry: 'cup', coffee: true },
+      { k: 'wait', ms: 7000, coffee: true },
+      { k: 'go', to: 'seat', coffee: true },
+      { k: 'set', state: 'idle', carry: null, coffee: true },
+    ]);
+  }
+}
+
+// Có việc mới thì bỏ dở chuyến cà phê, quay về bàn.
+function interrupt(c) {
+  if (!c || !(c.cur?.coffee || c.q.some((a) => a.coffee))) return;
+  if (c.cur?.coffee) c.cur = null;
+  c.q = c.q.filter((a) => !a.coffee);
+  c.q.unshift({ k: 'go', to: 'seat' }, { k: 'set', state: 'idle', carry: null });
+}
+
+function doWork(c, e, live) {
+  if (!c.atSeat) { enq(c, [{ k: 'go', to: 'seat' }]); c.pendingWork = e; return; }
+  setState(c, 'work');
+  if (c.icon !== '🙋') setIcon(c, '');
+  if (live) setBubble(c, (c.id.startsWith('agy') ? '⌨️ ' : '') + (e.text || 'Đang làm'), 3500);
+}
+
+// ---------- Hỏi / phỏng vấn giám đốc: trưởng phòng cầm sổ vào phòng, đứng hỏi và chờ trả lời ----------
+const INTERVIEW_MS = 30 * 60 * 1000;
+const LIGHT_WORK = /^(Đọc|Tìm|Tra cứu|Dùng skill|Xem trình duyệt|Gọi trợ lý)/; // việc làm được ngay trong phòng
+const interviewing = (c) => c.interviewAt && now() - c.interviewAt < INTERVIEW_MS;
+
+function goAsk(c, text) {
+  if (c.testing) { const o = C[c.testing.owner]; if (o?.icon === '🔍') setIcon(o, ''); c.testing = null; }
+  c.pendingWork = null;
+  setIcon(C.giamdoc, '💬');
+  if (c.meeting) { enq(c, [{ k: 'set', state: 'asking' }, { k: 'say', text, ms: 6000, kind: 'ask' }]); return; }
+  c.meeting = true;
+  enq(c, [
+    { k: 'set', carry: 'notebook' },
+    { k: 'go', to: 'giamdoc' },
+    { k: 'set', state: 'asking', facing: 'front' },
+    { k: 'say', text, ms: 6000, kind: 'ask' },
+  ]);
+}
+
+function leaveMeeting(c) {
+  if (!c.meeting) return;
+  c.meeting = false;
+  setIcon(C.giamdoc, '');
+  enq(c, [{ k: 'set', carry: null, state: 'idle' }, { k: 'go', to: 'seat' }]);
+}
+
+function endTesting(c) {
+  const o = c.testing && C[c.testing.owner];
+  c.testing = null;
+  if (o && o.icon === '🔍') setIcon(o, '');
+  enq(c, [{ k: 'set', carry: null, state: 'idle' }, { k: 'go', to: 'seat' }]);
+}
+
+// ---------- Sự kiện → hoạt cảnh ----------
+function onEvent(e, live) {
+  addLog(e);
+  updateTask(e);
+  const c = C[e.who], to = C[e.to];
+  if (e.task && e.who.startsWith('agy')) c.task = e.task;
+  if (live && (P[e.who].remote || P[e.to]?.remote)) {
+    packets.push({ t0: Date.now(), up: P[e.who].remote });
+    const r = P[e.who].remote ? e.who : e.to;
+    if (presence[r]) presence[r].seenAt = Date.now();
+  }
+  interrupt(c);
+  interrupt(to);
+  const T = e.task || '';
+  switch (e.type) {
+    case 'interview':
+      c.interviewAt = now();
+      goAsk(c, '🎤 ' + (e.text || 'Phỏng vấn giám đốc'));
+      break;
+    case 'ask':
+      if (interviewing(c)) c.interviewAt = now();
+      goAsk(c, '❓ ' + (e.text || 'Xin ý kiến giám đốc'));
+      break;
+    case 'answer':
+      setIcon(c, '');
+      if (!to) break;
+      if (interviewing(to)) to.interviewAt = now();
+      enq(to, [{ k: 'say', who: 'giamdoc', text: '💬 ' + (e.text || 'Đã trả lời'), ms: 4500 }, { k: 'say', text: '📝 Em ghi lại ạ', ms: 2000, kind: 'ask' }]);
+      break;
+    case 'assign':
+      if (!to || to === c) break;
+      if (c.id === 'giamdoc' && (to.meeting || interviewing(to))) { // đang phỏng vấn: lời nhắn của giám đốc là câu trả lời
+        if (interviewing(to)) to.interviewAt = now();
+        if (!to.meeting) goAsk(to, '👂 Em nghe ạ');
+        setIcon(c, '');
+        enq(to, [{ k: 'say', who: 'giamdoc', text: '💬 ' + (e.text || '…'), ms: 4500 }, { k: 'set', state: 'asking' }]);
+        break;
+      }
+      if (c.id === 'giamdoc') {
+        setIcon(c, '');
+        to.testing = null;
+        enq(to, [
+          { k: 'set', carry: null },
+          { k: 'go', to: 'giamdoc' },
+          { k: 'say', who: 'giamdoc', text: '📋 ' + (e.text || 'Việc mới'), ms: 4000 },
+          { k: 'wait', ms: 1600 },
+          { k: 'set', carry: 'folder' },
+          { k: 'say', text: 'Rõ, sếp!', ms: 1500 },
+          { k: 'go', to: 'seat' },
+          { k: 'set', carry: null, state: 'work' },
+        ]);
+      } else {
+        enq(c, [
+          { k: 'set', carry: 'folder' },
+          { k: 'go', to: e.to },
+          { k: 'say', text: '📋 Giao ' + [T, e.text].filter(Boolean).join(': '), ms: 3000 },
+          { k: 'fn', f: () => setIcon(to, '📥') },
+          { k: 'wait', ms: 1300 },
+          { k: 'set', carry: null },
+          { k: 'go', to: 'seat' },
+        ]);
+      }
+      break;
+    case 'accept':
+      enq(c, [{ k: 'go', to: 'seat' }, { k: 'set', state: 'work', icon: '' }, { k: 'say', text: '👍 Nhận ' + T + ', bắt đầu làm', ms: 2500 }]);
+      break;
+    case 'work':
+      if (c.meeting) { // đang đứng trong phòng giám đốc: tra cứu thì đứng luôn đó, việc khác thì về bàn
+        if (LIGHT_WORK.test(e.text || '')) {
+          c.lastWork = now();
+          if (live) setBubble(c, '📝 ' + e.text, 3500, 'ask');
+          break;
+        }
+        leaveMeeting(c);
+        c.pendingWork = e;
+      } else if (c.testing) { // trưởng phòng đang ở bàn nhân sự: lệnh nào cũng là để kiểm tra bài
+        c.lastWork = now();
+        if (live) setBubble(c, '🧪 ' + (e.text || 'Đang kiểm tra'), 3500, 'test');
+      } else if (c.cur || c.q.length || !c.atSeat) {
+        if (!c.cur && !c.q.length) enq(c, [{ k: 'go', to: 'seat' }]);
+        c.pendingWork = e;
+      } else doWork(c, e, live);
+      break;
+    case 'submit': // nhân sự nộp tại bàn mình rồi giơ tay chờ trưởng phòng tới kiểm tra
+      enq(c, [{ k: 'go', to: 'seat' }, { k: 'set', state: 'idle', icon: '🙋' }, { k: 'say', text: '📤 Nộp ' + T + ', chờ kiểm tra', ms: 3000 }]);
+      break;
+    case 'review': {
+      const o = C[tasks[e.task]?.owner];
+      if (!o || o === c) {
+        enq(c, [{ k: 'go', to: 'seat' }, { k: 'set', state: 'work' }, { k: 'say', text: '🔍 Nghiệm thu ' + T, ms: 2500, kind: 'test' }]);
+        break;
+      }
+      c.pendingWork = null;
+      if (c.meeting) { c.meeting = false; setIcon(C.giamdoc, ''); }
+      const again = c.testing?.owner === o.id;
+      c.testing = { task: e.task, owner: o.id };
+      c.lastWork = now();
+      if (again) { if (live) setBubble(c, '🧪 ' + (e.text || 'Kiểm tra ' + T), 3500, 'test'); break; }
+      enq(c, [
+        { k: 'set', carry: 'clipboard' },
+        { k: 'go', to: o.id },
+        { k: 'set', state: 'testing', facing: 'back' },
+        { k: 'fn', f: () => setIcon(o, '🔍') },
+        { k: 'say', text: `🧪 Kiểm tra ${T} tại bàn ${o.p.name}`, ms: 3500, kind: 'test' },
+      ]);
+      break;
+    }
+    case 'approve':
+    case 'reject': {
+      if (!to) break;
+      const ok = e.type === 'approve';
+      c.testing = null;
+      if (c.meeting) { c.meeting = false; setIcon(C.giamdoc, ''); }
+      enq(c, [
+        { k: 'set', carry: 'clipboard' },
+        { k: 'go', to: to.id },
+        { k: 'set', state: 'testing', facing: 'back' },
+        { k: 'say', text: ok ? '✅ Đạt ' + T : '↩️ Trả về ' + T + (e.text ? ': ' + e.text : ''), ms: 3500, kind: 'test' },
+        { k: 'fn', f: (lv) => {
+          setIcon(to, ok ? '🎉' : '❗', ok ? 6000 : 0);
+          if (lv) setBubble(to, ok ? '🎉 Yeah!' : '😅 Em sửa ngay', 2000);
+        } },
+        { k: 'wait', ms: 1600 },
+        { k: 'set', carry: null, state: 'idle' },
+        { k: 'go', to: 'seat' },
+      ]);
+      break;
+    }
+    case 'wait':
+      enq(c, [{ k: 'set', state: c.testing ? 'testing' : c.meeting ? 'asking' : 'wait', icon: '✋' }, { k: 'say', text: e.text || 'Chờ duyệt', ms: 4000 }]);
+      if (c.id !== 'giamdoc' && !c.meeting) setIcon(C.giamdoc, '📞');
+      break;
+    case 'idle':
+      c.pendingWork = null;
+      if (c.id === 'truongphong' && (c.meeting || interviewing(c))) { // hết lượt giữa buổi phỏng vấn: đứng chờ trả lời
+        goAsk(c, '⏳ Chờ giám đốc trả lời…');
+        break;
+      }
+      if (c.testing) { if (c.icon === '✋') setIcon(c, ''); break; } // hết lượt nhưng vẫn đứng ở bàn đang kiểm tra
+      enq(c, [{ k: 'set', state: 'idle', icon: c.icon === '✋' ? '' : c.icon }]);
+      if (c.id === 'truongphong') setIcon(C.giamdoc, '');
+      break;
+    case 'error':
+      enq(c, [{ k: 'set', state: 'error', icon: '❗' }, { k: 'say', text: e.text, ms: 3000 }]);
+      break;
+  }
+  if (!live) { flush(c); if (to) flush(to); }
+  dirty.people = true;
+}
+
+function updateTask(e) {
+  if (!e.task) return;
+  const t = (tasks[e.task] ??= { id: e.task, title: '', owner: null, status: 'todo' });
+  if (e.who.startsWith('agy')) t.owner = e.who;
+  if (e.type === 'assign') { t.title = e.text || t.title; t.owner = e.to; t.status = 'todo'; }
+  else if (e.type === 'accept' || e.type === 'work' || e.type === 'reject') t.status = 'doing';
+  else if (e.type === 'submit' || e.type === 'review') t.status = 'review';
+  else if (e.type === 'approve') t.status = 'done';
+  dirty.tasks = true;
+}
+
+// ---------- Vẽ ----------
+const BG = (() => {
+  const b = document.createElement('canvas');
+  b.width = W; b.height = H;
+  const g = b.getContext('2d');
+  const r = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  // sàn gỗ khu làm việc chung
+  for (let y = 44, row = 0; y < 198; y += 8, row++) {
+    r(row % 2 ? '#c79f77' : '#cba47c', 0, y, 270, 8);
+    r('#b38b63', 0, y + 7, 270, 1);
+    for (let x = (row % 2) * 24; x < 270; x += 48) r('#b38b63', x, y, 1, 7);
+  }
+  // khu máy từ xa: sàn gạch xanh xám
+  r('#3d4b5e', 0, 198, 270, H - 198);
+  for (let y = ANNEX_TOP; y < H; y += 12) r('#35424f', 0, y, 270, 1);
+  for (let x = 0; x < 270; x += 12) r('#35424f', x, ANNEX_TOP, 1, H - ANNEX_TOP);
+  // tường ngăn khu máy từ xa, chừa cửa
+  const wall = (x, w) => { r('#5d6385', x, 196, w, 3); r('#3a3e57', x, 199, w, 7); r('#2c2f43', x, 205, w, 1); };
+  wall(0, DOOR_X - 12); wall(DOOR_X + 12, 270 - DOOR_X - 12);
+  r('#2c2f43', DOOR_X - 12, 196, 1, 10); r('#2c2f43', DOOR_X + 11, 196, 1, 10);
+  // thảm phòng giám đốc
+  r('#5b4b6e', 272, 44, W - 272, H - 44);
+  for (let y = 48; y < H; y += 6) for (let x = 275 + ((y / 6) % 2) * 3; x < W; x += 6) r('#665580', x, y, 1, 1);
+  r('#7d5a50', 296, 118, 76, 52); r('#8f6a5e', 298, 120, 72, 48);
+  // tường
+  r('#4a4f6d', 0, 0, W, 44); r('#5a4e70', 272, 0, W - 272, 44);
+  r('#5d6385', 0, 0, W, 3); r('#3a3e57', 0, 40, W, 4);
+  const win = (x, y, w, h) => {
+    r('#2a2d40', x - 1, y - 1, w + 2, h + 2); r('#8fd0ff', x, y, w, h); r('#b8e2ff', x, y, w, h >> 1);
+    r('#2a2d40', x + (w >> 1), y, 1, h); r('#fff', x + 6, y + 5, 9, 2); r('#fff', x + 8, y + 4, 5, 1);
+    r('#fff', x + w - 16, y + 9, 7, 2); r('#3a3e57', x - 2, y + h + 1, w + 4, 2);
+  };
+  win(16, 8, 48, 24); win(76, 8, 48, 24); win(296, 8, 72, 24);
+  // bảng công việc trên tường
+  r('#8b8fa3', 139, 5, 118, 32); r('#f4f4ef', 140, 6, 116, 30);
+  STATUS.forEach((s, i) => { r(STATUS_UI[s][1], 140 + i * 29 + 2, 8, 25, 2); if (i) r('#dcdcd4', 140 + i * 29, 6, 1, 30); });
+  r('#8b8fa3', 152, 36, 92, 2);
+  // đồng hồ
+  for (let dy = -6; dy <= 6; dy++) { const w = Math.floor(Math.sqrt(40 - dy * dy)); r('#2a2d40', 132 - w - 1, 21 + dy, 2 * w + 3, 1); }
+  for (let dy = -5; dy <= 5; dy++) { const w = Math.floor(Math.sqrt(30 - dy * dy)); r('#f4f4ef', 132 - w, 21 + dy, 2 * w + 1, 1); }
+  // quầy cà phê
+  r('#9c7653', 4, 40, 40, 5); r('#7a5a3c', 4, 45, 40, 13); r('#6a4d33', 4, 57, 40, 1);
+  r('#2e2e36', 10, 26, 12, 15); r('#e5484d', 19, 29, 2, 2); r('#555', 13, 35, 6, 5);
+  r('#fff', 28, 36, 3, 4); r('#fff', 33, 36, 3, 4); r('#d97757', 38, 35, 4, 5);
+  // cây xanh
+  const plant = (x, y) => {
+    r('#3f8f4a', x - 5, y - 14, 10, 8); r('#4caf5a', x - 3, y - 17, 6, 5); r('#2f6f39', x - 1, y - 12, 2, 5);
+    r('#b5651d', x - 4, y - 6, 8, 6); r('#9c5418', x - 4, y - 6, 8, 1);
+  };
+  plant(56, 58); plant(258, 58); plant(376, 60); plant(262, 192); plant(8, 192); plant(258, 270); plant(376, 270);
+  // giá sách ở chỗ trống khu chung
+  r('#6d4426', 136, 132, 34, 22); r('#4e2f19', 138, 134, 30, 18);
+  ['#e5484d', '#f2c94c', '#4a7fd4', '#3fa66b', '#a99bff', '#d97757', '#9aa0b5'].forEach((col, i) => {
+    r(col, 139 + i * 4, 135, 3, 7); r(col, 141 + i * 4 - (i % 2), 144, 3, 7);
+  });
+  r('#6d4426', 138, 142, 30, 2);
+  // máy in
+  r('#c9ccd6', 220, 146, 20, 12); r('#9da1af', 220, 154, 20, 4); r('#fff', 224, 142, 12, 4); r('#3fa66b', 236, 148, 2, 1);
+  // tủ mạng + dây cáp tới bàn máy từ xa
+  r('#1e2028', 8, 212, 20, 34); r('#2c2f3a', 10, 214, 16, 4); r('#2c2f3a', 10, 220, 16, 4); r('#2c2f3a', 10, 226, 16, 4);
+  r('#e5c07b', CABLE.x1, CABLE.y, CABLE.x2 - CABLE.x1, 1);
+  // sofa phòng giám đốc
+  r('#8e3b46', 288, 222, 40, 6); r('#7b2f3c', 288, 228, 40, 10); r('#6a2834', 286, 224, 4, 14); r('#6a2834', 326, 224, 4, 14);
+  // vách kính phòng giám đốc, cửa ở lối giữa
+  const glass = (y, h) => { r('rgba(190,230,255,.45)', 270, y, 3, h); r('#9fb4cc', 270, y, 1, h); };
+  glass(44, 54); glass(126, H - 126);
+  r('#7e8aa6', 268, 97, 6, 1); r('#7e8aa6', 268, 126, 6, 1); r('#7e8aa6', 270, 0, 2, 44);
+  return b;
+})();
+
+function drawClock() {
+  const d = new Date(), hand = (ang, len, col) => {
+    for (let k = 1; k <= len; k++) R(col, Math.round(132 + Math.cos(ang) * k), Math.round(21 + Math.sin(ang) * k), 1, 1);
+  };
+  hand(((d.getHours() % 12) + d.getMinutes() / 60) / 12 * 2 * Math.PI - Math.PI / 2, 3, '#2a2d40');
+  hand(d.getMinutes() / 60 * 2 * Math.PI - Math.PI / 2, 5, '#e5484d');
+  R('#2a2d40', 132, 21, 1, 1);
+}
+
+function drawBoard() {
+  const cols = { todo: [], doing: [], review: [], done: [] };
+  for (const t of Object.values(tasks)) cols[t.status].push(t);
+  STATUS.forEach((s, ci) => cols[s].slice(-15).forEach((t, i) => {
+    R(t.owner && P[t.owner] ? P[t.owner].shirt : '#ccc', 140 + ci * 29 + 3 + (i % 5) * 5, 13 + Math.floor(i / 5) * 6, 4, 4);
+  }));
+}
+
+// Đèn tủ mạng nháy khi máy từ xa đang kết nối; gói tin chạy trên dây khi có sự kiện.
+function drawNetwork(t) {
+  const online = C.agy2.present;
+  for (let i = 0; i < 3; i++) {
+    const on = online && (Math.floor(t / 180) + i * 3) % 4 !== 0;
+    R(online ? (on ? '#3fd17a' : '#1d5e36') : '#7a2326', 22, 215 + i * 6, 2, 2);
+    R(online ? '#7fb2ff' : '#3a3e57', 12, 215 + i * 6, 6, 1);
+  }
+  const n = Date.now();
+  packets = packets.filter((p) => n - p.t0 < 1200);
+  for (const p of packets) {
+    const k = (n - p.t0) / 1200, x = p.up ? CABLE.x2 - k * (CABLE.x2 - CABLE.x1) : CABLE.x1 + k * (CABLE.x2 - CABLE.x1);
+    R('#fff4c2', Math.round(x) - 1, CABLE.y - 1, 3, 3);
+  }
+}
+
+function drawDesk(p, c, t) {
+  const { x, y, w } = p.desk, cx = x + (w >> 1);
+  R('#6d4426', x + 1, y + 14, 2, 4); R('#6d4426', x + w - 3, y + 14, 2, 4);
+  R('#b07a4c', x, y, w, 9); R('#c48c5a', x, y, w, 1); R('#8d5c33', x, y + 9, w, 5);
+  R('#555', cx - 1, y - 1, 2, 2); R('#1d1f27', cx - 9, y - 12, 18, 12);
+  const sx = cx - 8, sy = y - 11, ph = Math.floor(t / 200);
+  const tester = C.truongphong.testing?.owner === c.id && C.truongphong.state === 'testing';
+  if (tester) { // màn hình chạy test khi trưởng phòng đang kiểm tra tại bàn này
+    R('#1a1530', sx, sy, 16, 10);
+    const done = ph % 14;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const k = i * 4 + j;
+      R(k < done ? (k % 7 === 6 ? '#f5c542' : '#5cc98a') : '#3a335c', sx + 2 + j * 3, sy + 1 + i * 2, 2, 1);
+    }
+  } else if (!c.present || !c.atSeat || c.walking || c.state === 'coffee') R('#0d0e12', sx, sy, 16, 10);
+  else if (c.state === 'work') {
+    R('#13261c', sx, sy, 16, 10);
+    for (let i = 0; i < 4; i++) R(i % 2 ? '#5ad1a0' : '#7fb2ff', sx + 1 + (i % 3), sy + 1 + i * 2, Math.min(3 + ((ph + i * 7 + p.seed) % 11), 14 - (i % 3)), 1);
+  } else if (c.state === 'wait') R(Math.floor(t / 500) % 2 ? '#f5c542' : '#8a6d1b', sx, sy, 16, 10);
+  else if (c.state === 'error') R(Math.floor(t / 300) % 2 ? '#e5484d' : '#5a1a1c', sx, sy, 16, 10);
+  else { R('#1e3350', sx, sy, 16, 10); R('#4f7fb8', sx + (Math.floor(t / 600) % 14), sy + 4, 2, 2); }
+  R('#e3e3e3', cx - 6, y + 3, 12, 2); R('#efefef', x + 3, y + 2, 3, 3);
+  if (p.lamp) { R('#f5d76e', x + w - 9, y - 7, 6, 3); R('#555', x + w - 7, y - 4, 1, 5); }
+  if (p.remote) { R('#2c2f3a', x + w - 8, y + 2, 6, 3); R(c.present ? '#3fd17a' : '#7a2326', x + w - 7, y + 3, 1, 1); } // modem
+}
+
+function drawChair(p) {
+  const { x, y } = p.seat;
+  R('#2b2e3b', x - 6, y - 11, 12, 7); R('#3d4155', x - 6, y - 11, 12, 1);
+  R('#222', x - 1, y - 4, 2, 3); R('#222', x - 5, y - 1, 10, 1);
+}
+
+function drawPerson(c, t) {
+  if (!c.present) return;
+  const p = c.p, X = Math.round(c.x), Y = Math.round(c.y), ph = Math.floor(t / 140) % 2;
+  const tp = C.truongphong;
+  const turned = c.id === 'giamdoc' && tp.meeting && tp.state === 'asking' && !tp.walking; // giám đốc quay ghế ra nói chuyện
+  const seated = c.atSeat && !c.walking, back = c.facing === 'back' && !turned;
+  const typing = seated && c.state === 'work';
+  if (!seated) {
+    R('rgba(0,0,0,.22)', X - 5, Y - 1, 10, 2);
+    const l1 = c.walking && ph ? 1 : 0, l2 = c.walking && !ph ? 1 : 0;
+    R(p.pants, X - 4, Y - 6, 3, 6 - l1); R(p.pants, X + 1, Y - 6, 3, 6 - l2);
+    R('#222', X - 4, Y - 1 - l1, 3, 1); R('#222', X + 1, Y - 1 - l2, 3, 1);
+  }
+  R(p.shirt, X - 5, Y - 14, 10, 8);
+  R(p.dark, X - 6, Y - 13, 1, 6); R(p.dark, X + 5, Y - 13, 1, 6);
+  if (typing) { R(p.skin, X - 7, Y - 12 + ph, 1, 2); R(p.skin, X + 6, Y - 11 - ph, 1, 2); }
+  else { R(p.skin, X - 6, Y - 7, 1, 1); R(p.skin, X + 5, Y - 7, 1, 1); }
+  const hy = Y - 21 + (typing && Math.floor(t / 420) % 2 ? 1 : 0);
+  R(p.skin, X - 4, hy, 8, 7);
+  if (back) {
+    R(p.hair, X - 4, hy - 1, 8, 6);
+    if (p.hood) R(p.dark, X - 5, hy + 6, 10, 2);
+  } else {
+    R(p.hair, X - 4, hy - 1, 8, 3); R(p.hair, X - 4, hy + 2, 1, 2); R(p.hair, X + 3, hy + 2, 1, 2);
+    R('#222', X - 2, hy + 3, 1, 1); R('#222', X + 1, hy + 3, 1, 1);
+    if (p.glasses) { R('#222', X - 3, hy + 3, 3, 1); R('#222', X + 1, hy + 3, 3, 1); }
+    if (p.tie) R(p.tie, X, Y - 14, 1, 5);
+    if (p.hood) { R(p.dark, X - 5, hy + 6, 2, 2); R(p.dark, X + 3, hy + 6, 2, 2); }
+  }
+  if (c.carry === 'folder') { R('#f2c94c', X + 4, Y - 12, 5, 4); R('#d4a72c', X + 4, Y - 12, 5, 1); }
+  if (c.carry === 'cup') { R('#fff', X + 5, Y - 11, 3, 3); R('#6b3e1f', X + 5, Y - 11, 3, 1); R('rgba(255,255,255,.7)', X + 6, Y - 14 - ph, 1, 1); }
+  if (c.carry === 'notebook') {
+    R('#2f5fa8', X + 4, Y - 13, 5, 6); R('#f4f4ef', X + 5, Y - 12, 3, 4);
+    R('#f2a541', X + 5, Y - 11 + (c.state === 'asking' ? ph : 0), 3, 1);
+  }
+  if (c.carry === 'clipboard') {
+    R('#8d5c33', X + 4, Y - 13, 5, 6); R('#f4f4ef', X + 5, Y - 12, 3, 4);
+    R(c.state === 'testing' && ph ? '#5cc98a' : '#a99bff', X + 5, Y - 11, 3, 1);
+  }
+}
+
+function render(t) {
+  ctx.drawImage(BG, 0, 0);
+  drawClock();
+  drawBoard();
+  drawNetwork(t);
+  const list = [];
+  for (const id of ORDER) {
+    const p = P[id], c = C[id];
+    list.push([p.desk.y + 14, () => drawDesk(p, c, t)], [c.y, () => drawPerson(c, t)], [p.seat.y + 0.5, () => drawChair(p)]);
+  }
+  list.sort((a, b) => a[0] - b[0]).forEach((d) => d[1]());
+}
+
+// ---------- Lớp chữ (nhãn tên, bong bóng thoại, biển khu máy từ xa) ----------
+const ov = document.getElementById('ov'), els = {};
+for (const id of ORDER) {
+  const tag = document.createElement('div'), bub = document.createElement('div');
+  tag.className = 'tag'; bub.className = 'bub';
+  ov.append(tag, bub);
+  els[id] = { tag, bub, key: '' };
+}
+const sign = document.createElement('div');
+sign.className = 'sign';
+ov.prepend(sign); // nằm dưới bong bóng thoại
+let scale = 2;
+
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+function machineText(id) {
+  const info = presence[id];
+  if (!info) return 'Chưa kết nối';
+  const ip = info.lanIp && info.lanIp !== info.ip ? `${info.ip} (LAN ${info.lanIp})` : info.ip;
+  return `${info.host} · ${ip}`;
+}
+
+function updateOverlay() {
+  const n = Date.now();
+  for (const id of ORDER) {
+    const c = C[id], e = els[id];
+    const show = c.present && c.bubble && c.bubble.until > n;
+    const tagText = c.p.name + (c.present ? (c.icon ? ' ' + c.icon : '') : ' 📴');
+    const key = [Math.round(c.x * scale), Math.round(c.y * scale), tagText, show ? c.bubble.text + c.bubble.kind : '', scale].join('|');
+    if (key === e.key) continue;
+    e.key = key;
+    e.tag.textContent = tagText;
+    e.tag.style.transform = `translate(${c.x * scale}px, ${(c.y + 2) * scale}px) translateX(-50%)`;
+    if (show) {
+      e.bub.textContent = c.bubble.text;
+      e.bub.classList.toggle('test', c.bubble.kind === 'test');
+      e.bub.classList.toggle('ask', c.bubble.kind === 'ask');
+    }
+    e.bub.classList.toggle('on', !!show);
+    e.bub.style.transform = `translate(${c.x * scale}px, ${(c.y - 23) * scale}px) translate(-50%, -100%)`;
+  }
+  if (dirty.sign) {
+    dirty.sign = false;
+    const c = C.agy2, info = presence.agy2;
+    sign.classList.toggle('on', c.present);
+    sign.innerHTML = `<i></i>Máy từ xa · ${esc(machineText('agy2'))}` +
+      (info && !c.present ? ` · mất kết nối từ ${fmtTime(info.seenAt)}` : '');
+    sign.style.transform = `translate(${32 * scale}px, ${209 * scale}px)`;
+  }
+}
+
+function fit() {
+  const st = document.getElementById('stage');
+  const s = Math.min((st.clientWidth - 24) / W, (st.clientHeight - 24) / H);
+  scale = s >= 2 ? Math.floor(s) : Math.max(s, 1);
+  cv.style.width = W * scale + 'px';
+  cv.style.height = H * scale + 'px';
+  for (const id of ORDER) els[id].key = '';
+  dirty.sign = true;
+}
+addEventListener('resize', fit);
+
+// ---------- Bảng bên ----------
+const dirty = { people: true, tasks: true, log: true, sign: true };
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+const nameOf = (id) => P[id]?.name || id;
+
+function describe(e) {
+  const T = e.task ? `<code>${esc(e.task)}</code> ` : '';
+  switch (e.type) {
+    case 'assign': return `giao ${T}cho <b>${esc(nameOf(e.to))}</b>${e.text ? ': ' + esc(e.text) : ''}`;
+    case 'accept': return `nhận ${T}`;
+    case 'work': return (e.who.startsWith('agy') ? 'tự làm: ' : '') + esc(e.text || 'đang làm');
+    case 'submit': return `nộp ${T}, chờ kiểm tra`;
+    case 'review': return `🧪 tới kiểm tra ${T}${tasks[e.task]?.owner ? `tại bàn <b>${esc(nameOf(tasks[e.task].owner))}</b>` : ''}`;
+    case 'approve': return `✅ duyệt đạt ${T}của <b>${esc(nameOf(e.to))}</b>`;
+    case 'reject': return `↩️ trả về ${T}${e.text ? ': ' + esc(e.text) : ''}`;
+    case 'wait': return `✋ ${esc(e.text || 'đang chờ')}`;
+    case 'idle': return 'rảnh tay';
+    case 'error': return `❗ ${esc(e.text)}`;
+    case 'interview': return `🎤 vào phòng phỏng vấn giám đốc${e.text ? ' (' + esc(e.text) + ')' : ''}`;
+    case 'ask': return `❓ hỏi: ${esc(e.text)}`;
+    case 'answer': return `💬 trả lời: ${esc(e.text)}`;
+  }
+  return esc(e.type);
+}
+
+function addLog(e) {
+  const cls = ['interview', 'ask', 'answer'].includes(e.type) || (e.type === 'assign' && C.truongphong.meeting) ? 'ask'
+    : e.type === 'review' || e.type === 'approve' || e.type === 'reject' || (e.who === 'truongphong' && C.truongphong.testing) ? 'test' : '';
+  logItems.push({ e, html: describe(e), cls });
+  if (logItems.length > 80) logItems.shift();
+  dirty.log = true;
+}
+
+function statusText(c) {
+  if (!c.present) return presence[c.id] ? 'Ngoại tuyến' : 'Chưa kết nối';
+  if (c.id === 'truongphong' && c.meeting) return `<span class="asking">${interviewing(c) ? '🎤 Phỏng vấn giám đốc' : '💬 Đang hỏi giám đốc'}</span>`;
+  if (c.id === 'giamdoc' && C.truongphong.meeting) return '<span class="asking">Đang trao đổi với Claude</span>';
+  if (c.id === 'truongphong' && c.testing) return `<span class="testing">🧪 Kiểm tra ${esc(c.testing.task)} tại bàn ${esc(nameOf(c.testing.owner))}</span>`;
+  if (c.icon === '🔍') return '<span class="testing">Claude đang kiểm tra bài</span>';
+  if (c.walking) return 'Đang di chuyển';
+  if (c.icon === '🙋') return `Đã nộp ${esc(c.task || '')}, chờ kiểm tra`;
+  if (c.state === 'work') return c.id.startsWith('agy') ? `Tự làm ${esc(c.task || '')}` : 'Đang làm';
+  return { idle: 'Đang rảnh', wait: 'Chờ giám đốc', error: 'Gặp lỗi', coffee: 'Đi pha cà phê', testing: 'Đang kiểm tra' }[c.state];
+}
+
+let peopleKey = '';
+function renderPanel() {
+  const pk = ORDER.map((id) => { const c = C[id]; return [c.state, c.walking, c.icon, c.present, c.testing?.task, c.task].join(); }).join('|') + machineText('agy2');
+  if (pk !== peopleKey || dirty.people) {
+    peopleKey = pk;
+    dirty.people = false;
+    document.getElementById('people').innerHTML = ORDER.map((id) => {
+      const c = C[id];
+      const machine = c.p.remote ? `<small>🖥 ${esc(machineText(id))}${presence[id]?.platform ? ' · ' + esc(presence[id].platform) : ''}</small>` : '';
+      return `<div class="person"><i class="dot" style="background:${c.p.shirt}"></i><b>${c.p.name}</b><span>${c.p.role} · ${statusText(c)}</span>${machine}</div>`;
+    }).join('');
+  }
+  if (dirty.tasks) {
+    dirty.tasks = false;
+    const list = Object.values(tasks);
+    const open = list.filter((t) => t.status !== 'done'), done = list.filter((t) => t.status === 'done').slice(-4);
+    const rows = [...open.sort((a, b) => STATUS.indexOf(a.status) - STATUS.indexOf(b.status)), ...done.reverse()];
+    document.getElementById('tasks').innerHTML = rows.length ? rows.map((t) => {
+      const [label, col] = STATUS_UI[t.status];
+      return `<div class="task"><i class="dot" style="background:${P[t.owner]?.shirt || '#888'}"></i><code>${esc(t.id)}</code><span class="t">${esc(t.title)}</span><span class="pill" style="background:${col}">${label}</span></div>`;
+    }).join('') : '<div class="empty">Chưa có task nào</div>';
+  }
+  if (dirty.log) {
+    dirty.log = false;
+    document.getElementById('log').innerHTML = logItems.slice().reverse().map(({ e, html, cls }) => {
+      const time = e.ts ? new Date(e.ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      return `<div class="${cls}"><time>${time}</time><b>${esc(nameOf(e.who))}</b> ${html}</div>`;
+    }).join('');
+  }
+}
+
+// ---------- Vòng lặp: 12 fps khi có hoạt động, 4 fps khi yên, dừng hẳn khi tab ẩn ----------
+let last = 0;
+function busy() {
+  const n = Date.now();
+  return packets.length || ORDER.some((id) => { const c = C[id]; return c.cur || c.q.length || c.state !== 'idle' || (c.bubble && c.bubble.until > n); });
+}
+function loop(t) {
+  requestAnimationFrame(loop);
+  if (t - last < 1000 / (busy() ? 12 : 4)) return;
+  const dt = Math.min(t - last, 1000) / 1000; // trình duyệt có thể bóp rAF, vẫn đi đúng tốc độ
+  last = t;
+  updatePresence();
+  for (const id of ORDER) step(C[id], dt);
+  render(t);
+  updateOverlay();
+  renderPanel();
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) for (const id of ORDER) flush(C[id]);
+});
+
+// ---------- Kết nối ----------
+function setPresence(data) {
+  const skew = Date.now() - data.now; // đổi giờ máy chủ sang giờ máy đang xem
+  presence = {};
+  for (const [id, v] of Object.entries(data.presence || {})) presence[id] = { ...v, seenAt: v.lastSeen + skew };
+  dirty.sign = dirty.people = true;
+  updatePresence();
+}
+
+function connect() {
+  const conn = document.getElementById('conn');
+  const es = new EventSource('/events' + location.search); // giữ ?token= khi xem từ máy khác
+  es.onopen = () => { conn.className = 'ok'; conn.lastChild.textContent = 'Trực tiếp'; };
+  es.onerror = () => { conn.className = ''; conn.lastChild.textContent = 'Mất kết nối, thử lại…'; };
+  es.onmessage = (m) => {
+    const data = JSON.parse(m.data);
+    if (data.replay) {
+      reset();
+      setPresence(data);
+      for (const e of data.replay) { replayNow = Date.parse(e.ts) || Date.now(); onEvent(e, false); }
+      replayNow = null;
+      dirty.tasks = dirty.log = dirty.people = true;
+    } else if (data.presence) {
+      setPresence(data);
+    } else {
+      onEvent(data, !document.hidden);
+      if (document.hidden) for (const id of ORDER) flush(C[id]);
+    }
+  };
+}
+
+reset();
+fit();
+connect();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

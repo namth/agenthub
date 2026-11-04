@@ -1,0 +1,40 @@
+{
+  "id": "TASK-012",
+  "title": "Giao diện SCR-08 Văn phòng ảo (canvas động từ SSE)",
+  "status": "accepted",
+  "conversation_id": "cf65c812-b151-434a-a0cf-7534ef0fd37c",
+  "history": [
+    {
+      "at": "2026-11-04T09:01:51",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T09:03:23",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T09:03:35",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:11:27",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:12:41",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-012-office-ui/verify.sh",
+    "web/src/office/office.test.tsx",
+    "web/src/pages/screens.test.tsx",
+    "web/src/nav.test.ts"
+  ],
+  "via": "agy"
+}
