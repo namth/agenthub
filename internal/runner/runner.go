@@ -52,6 +52,10 @@ type Config struct {
 	AuthCheckEvery   time.Duration
 	AuthFreshFor     time.Duration
 	AuthCheckTimeout time.Duration
+
+	AuthProbes   map[string][]string
+	ProbeEvery   time.Duration
+	ProbeTimeout time.Duration
 }
 
 type agentState struct {
@@ -145,6 +149,12 @@ func New(cfg Config, exec Executor, git Git, now func() time.Time) *Runner {
 	}
 	if cfg.AuthCheckTimeout == 0 {
 		cfg.AuthCheckTimeout = 15 * time.Second
+	}
+	if cfg.ProbeEvery == 0 {
+		cfg.ProbeEvery = 6 * time.Hour
+	}
+	if cfg.ProbeTimeout == 0 {
+		cfg.ProbeTimeout = 60 * time.Second
 	}
 	if cfg.OS == "" {
 		cfg.OS = runtime.GOOS
@@ -297,6 +307,26 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 		}
 	}
 
+	if r.cfg.AuthProbes != nil {
+		seenProbeKind := make(map[string]bool)
+		for _, a := range r.cfg.Agents {
+			if seenProbeKind[a.Kind] {
+				continue
+			}
+			seenProbeKind[a.Kind] = true
+			if probeCmd, ok := r.cfg.AuthProbes[a.Kind]; ok && len(probeCmd) > 0 {
+				probeCtx, cancel := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
+				var buf bytes.Buffer
+				exit, err := r.exec.Run(probeCtx, "", probeCmd, &buf)
+				cancel()
+				st, dt := ParseProbeResult(exit, buf.String(), err)
+				if st == AuthOK || st == AuthNeeds {
+					agentAuthByKind[a.Kind] = authInfo{status: st, detail: dt, checkedAt: r.now()}
+				}
+			}
+		}
+	}
+
 	r.mu.Lock()
 	r.ghAuthStatus = ghAuthStatus
 	r.ghAuthDetail = ghAuthDetail
@@ -380,6 +410,26 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 					return
 				case <-ticker.C:
 					r.performPeriodicAuthCheck(authCtx)
+				}
+			}
+		}()
+	}
+
+	// Kiểm tra định kỳ Probe
+	if r.cfg.AuthProbes != nil && r.cfg.ProbeEvery > 0 {
+		probeTimerCtx, cancelProbe := context.WithCancel(ctx)
+		defer cancelProbe()
+		go func() {
+			ticker := time.NewTicker(r.cfg.ProbeEvery)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-probeTimerCtx.Done():
+					return
+				case <-connDone:
+					return
+				case <-ticker.C:
+					r.performPeriodicAuthProbe(probeTimerCtx)
 				}
 			}
 		}()
