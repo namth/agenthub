@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -84,11 +85,69 @@ func Migrate(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+		bodyStr := string(body)
+		firstLine := strings.TrimRight(strings.SplitN(bodyStr, "\n", 2)[0], "\r")
+		if firstLine == "-- agenthub:foreign_keys=off" {
+			ctx := context.Background()
+			conn, err := db.Conn(ctx)
+			if err != nil {
+				return fmt.Errorf("migration %s: get conn: %w", base, err)
+			}
+			runErr := func() error {
+				defer func() {
+					conn.ExecContext(ctx, "PRAGMA foreign_keys=ON")
+					conn.Close()
+				}()
+				if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+					return fmt.Errorf("migration %s: turn off foreign_keys: %w", base, err)
+				}
+				tx, err := conn.BeginTx(ctx, nil)
+				if err != nil {
+					return fmt.Errorf("migration %s: begin tx: %w", base, err)
+				}
+				if _, err := tx.ExecContext(ctx, bodyStr); err != nil {
+					tx.Rollback()
+					return fmt.Errorf("migration %s: %w", base, err)
+				}
+				rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+				if err != nil {
+					tx.Rollback()
+					return fmt.Errorf("migration %s: pragma foreign_key_check: %w", base, err)
+				}
+				hasViolation := false
+				var violationMsg string
+				for rows.Next() {
+					hasViolation = true
+					var table, parent string
+					var rowid, fkid int64
+					if err := rows.Scan(&table, &rowid, &parent, &fkid); err == nil {
+						violationMsg = fmt.Sprintf("table %s row %d references %s", table, rowid, parent)
+					}
+				}
+				rows.Close()
+				if hasViolation {
+					tx.Rollback()
+					return fmt.Errorf("migration %s: foreign key check failed: %s", base, violationMsg)
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version) VALUES (?)`, version); err != nil {
+					tx.Rollback()
+					return fmt.Errorf("migration %s: insert schema_migrations: %w", base, err)
+				}
+				if err := tx.Commit(); err != nil {
+					return fmt.Errorf("migration %s: commit tx: %w", base, err)
+				}
+				return nil
+			}()
+			if runErr != nil {
+				return runErr
+			}
+			continue
+		}
 		tx, err := db.Begin()
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(string(body)); err != nil {
+		if _, err := tx.Exec(bodyStr); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("migration %s: %w", base, err)
 		}
