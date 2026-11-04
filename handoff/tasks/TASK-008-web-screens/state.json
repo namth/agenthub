@@ -1,0 +1,18 @@
+{
+  "id": "TASK-008",
+  "title": "Giao diện SCR-02 Kanban, SCR-03 Tạo yêu cầu, SCR-05 Fleet",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T08:48:21",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-008-web-screens/verify.sh",
+    "web/src/pages/screens.test.tsx",
+    "web/src/nav.test.ts"
+  ]
+}
