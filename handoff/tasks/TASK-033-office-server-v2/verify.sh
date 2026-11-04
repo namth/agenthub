@@ -8,7 +8,7 @@ out=$(go test $PKGS -count=1 -race -v 2>&1) || { echo "$out" | grep -E -- "--- F
 echo "$out" | grep -E "^(ok|FAIL)" || true
 for t in TestPartnerStreamsNewPath TestOldPathRedirects TestPerUserAndTotalLimits TestDefaultLimits TestSettingsTelegramEnabled \
          TestAuthEventMapping TestPresenceTouchThrottled TestPresenceOrderingAndEvents TestPresenceMiddleware TestBuildSnapshot \
-         TestOnApprovedHook TestRBACAndDisabled TestMaxStreams; do
+         TestOnApprovedHook TestRBACAndDisabled TestMaxStreams TestOfficeStatusForAnyUser; do
   echo "$out" | grep -q -- "--- PASS: $t " || { echo "Thiếu PASS $t"; exit 1; }
 done
 for s in "office.BuildSnapshot" "office.NewPresence" "WithOnApproved" "/api/office/"; do

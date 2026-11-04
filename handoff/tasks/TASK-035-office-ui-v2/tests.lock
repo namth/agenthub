@@ -1,0 +1,4 @@
+207fdf6ea5bfc69f3b35d34c7abf5dde6f4f74b1d12d9a8dc78a28b0740d2f9f  handoff/tasks/TASK-035-office-ui-v2/verify.sh
+dfd1036472017ec04ecd64402f3edc0b70aedf0820ad231d43a3c1df5be6d9ce  web/src/office/office_v2.test.tsx
+4747713c34f2eac873e6ec569f342857cbe28843b473728c3247352709b37f4e  web/src/office/office.test.tsx
+411c60c90908b47a3d515f5445ec02aed53b526a7fa5dbb61d7ddc5ba1af1b5a  web/src/nav.test.ts

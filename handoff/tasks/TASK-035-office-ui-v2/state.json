@@ -1,0 +1,19 @@
+{
+  "id": "TASK-035",
+  "title": "Office UI bản 2: hai cụm bàn, khu chỉ huy, nội thất, logo INOVA",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T16:36:17",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-035-office-ui-v2/verify.sh",
+    "web/src/office/office_v2.test.tsx",
+    "web/src/office/office.test.tsx",
+    "web/src/nav.test.ts"
+  ]
+}

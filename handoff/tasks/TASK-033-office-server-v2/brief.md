@@ -17,7 +17,7 @@ Văn phòng ảo biết ai đang online (khu chỉ huy), snapshot có danh sách
 ## 4. Đặc tả chi tiết
 **`office.Options`** thêm: `MaxPerUser int` (mặc định 3; chỉ áp dụng khi có `User`), `User func(*http.Request) (userID string, ok bool)`, `Presence *Presence`, `TelegramEnabled bool`. `MaxStreams` mặc định đổi thành **30**.
 
-**Route:** `GET /api/office/stream` — mọi người dùng đã đăng nhập (`authz` ok, không xét vai) → như stream cũ; `GET /api/admin/office/stream` → `308` tới `/api/office/stream` (giữ query). Vượt `MaxPerUser` của cùng `userID` hoặc vượt `MaxStreams` tổng → `429 TOO_MANY_CONNECTIONS`. Có `Presence` → gọi `StreamOpened(userID)` khi mở, `StreamClosed(userID)` khi đóng. `GET /api/admin/settings` thêm `"telegram_enabled": opt.TelegramEnabled` (vẫn chỉ ADMIN).
+**Route:** `GET /api/office/stream` — mọi người dùng đã đăng nhập (`authz` ok, không xét vai) → như stream cũ; `GET /api/admin/office/stream` → `308` tới `/api/office/stream` (giữ query). Vượt `MaxPerUser` của cùng `userID` hoặc vượt `MaxStreams` tổng → `429 TOO_MANY_CONNECTIONS`. Có `Presence` → gọi `StreamOpened(userID)` khi mở, `StreamClosed(userID)` khi đóng. `GET /api/admin/settings` thêm `"telegram_enabled": opt.TelegramEnabled` (vẫn chỉ ADMIN). Thêm `GET /api/office/status` → `{ "enabled": bool }` cho mọi người dùng đã đăng nhập (401 nếu chưa) — để sidebar của partner biết có hiện mục Văn phòng.
 
 **`Bus.Notify`** thêm: `dispatcher.EvAgentAuth` → `Event{Who: AgentID, Type: "auth", Text: AuthStatus}` **chỉ khi** `AuthStatus` hoặc `PrevAuthStatus` là `NEEDS_AUTH`; `dispatcher.EvWorkerAuth` → tương tự với `Who: WorkerID`.
 

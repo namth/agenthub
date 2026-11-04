@@ -384,3 +384,33 @@ func TestBuildSnapshot(t *testing.T) {
 }
 
 func newScanner(res *http.Response) *bufio.Scanner { return bufio.NewScanner(res.Body) }
+
+func TestOfficeStatusForAnyUser(t *testing.T) {
+	r := newV2Rig(t, office.Options{})
+	get := func(role string) (int, map[string]any) {
+		req, _ := http.NewRequest("GET", r.srv.URL+"/api/office/status", nil)
+		if role != "" {
+			req.Header.Set("X-Test-Role", role)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var m struct {
+			Data map[string]any `json:"data"`
+		}
+		json.NewDecoder(res.Body).Decode(&m)
+		return res.StatusCode, m.Data
+	}
+	if code, _ := get(""); code != 401 {
+		t.Fatalf("chưa đăng nhập: %d", code)
+	}
+	if code, d := get("PARTNER"); code != 200 || d["enabled"] != true {
+		t.Fatalf("partner: %d %v, muốn 200 enabled=true", code, d)
+	}
+	r.db.Exec(`UPDATE settings SET value='false' WHERE key='office_enabled'`)
+	if code, d := get("PARTNER"); code != 200 || d["enabled"] != false {
+		t.Fatalf("tắt: %d %v", code, d)
+	}
+}
