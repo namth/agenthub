@@ -425,8 +425,27 @@ func (s *Service) Tick() error {
 		}
 	}
 
-	// 3. Lease hết hạn -> thu hồi EXPIRED
+	// 3. Máy của lead tạm dừng -> thu hồi RELEASED (BR-32)
 	var leaseState string
+	var leaseAgent sql.NullString
+	_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
+	if leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String != "" {
+		var isPaused int
+		err := s.db.QueryRow(`
+			SELECT w.paused
+			FROM agents a
+			JOIN workers w ON a.worker_id = w.id
+			WHERE a.id = ?`, leaseAgent.String).Scan(&isPaused)
+		if err == nil && isPaused == 1 {
+			evs, err := s.revokeLeadLocked(RevokeReleased, false)
+			if err != nil {
+				return err
+			}
+			events = append(events, evs...)
+		}
+	}
+
+	// 4. Lease hết hạn -> thu hồi EXPIRED
 	var expVal any
 	_ = s.db.QueryRow("SELECT state, expires_at FROM lead_lease WHERE id = 1").Scan(&leaseState, &expVal)
 	expTime := parseDBTime(expVal)
@@ -596,7 +615,12 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 
 	// 1. Kiểm tra agent tồn tại
 	var agWorker, kind, status string
-	err := s.db.QueryRow("SELECT worker_id, kind, status FROM agents WHERE id = ?", agentID).Scan(&agWorker, &kind, &status)
+	var paused int
+	err := s.db.QueryRow(`
+		SELECT a.worker_id, a.kind, a.status, w.paused
+		FROM agents a
+		JOIN workers w ON a.worker_id = w.id
+		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -607,6 +631,11 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	// 2. Kiểm tra quyền sở hữu
 	if agWorker != workerID {
 		return nil, ErrAgentNotOwned
+	}
+
+	// 2b. Máy tạm dừng không nhận việc (BR-32)
+	if paused == 1 {
+		return nil, nil
 	}
 
 	// 3. Phải IDLE
@@ -630,48 +659,74 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
 	isLead := (leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String == agentID)
 
-	// 6. Tìm job QUEUED
-	var query string
-	if isLead {
-		query = `SELECT id, task_id, kind, attempt, branch_name
-		         FROM jobs
-		         WHERE status = 'QUEUED' AND required_agent = ?
-		         ORDER BY lead_only DESC, priority ASC, created_at ASC
-		         LIMIT 1`
-	} else {
-		query = `SELECT id, task_id, kind, attempt, branch_name
-		         FROM jobs
-		         WHERE status = 'QUEUED' AND required_agent = ? AND lead_only = 0
-		         ORDER BY priority ASC, created_at ASC
-		         LIMIT 1`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
 	}
+	defer tx.Rollback()
 
+	// 6. Tìm job QUEUED (DEC-16, BR-25, BR-29)
 	var jobID, taskID, jobKind string
 	var prevAttempt int
 	var branch sql.NullString
-	err = s.db.QueryRow(query, kind).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+	found := false
+
+	// 1) Agent là lead -> job lead_only trước (mọi dự án, không xét agent_projects)
+	if isLead {
+		err = tx.QueryRow(`
+			SELECT id, task_id, kind, attempt, branch_name
+			FROM jobs
+			WHERE status = 'QUEUED' AND required_agent = ? AND lead_only = 1
+			ORDER BY priority ASC, created_at ASC, id ASC
+			LIMIT 1`, kind).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+		if err == nil {
+			found = true
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
 	}
-	if err != nil {
-		return nil, err
+
+	// 2) Còn lại: job QUEUED đúng required_agent, lead_only = 0, thuộc dự án status = 'ACTIVE',
+	// chưa đạt max_parallel, và nằm trong agent_projects của agent (agent không có dòng nào = mọi dự án).
+	if !found {
+		err = tx.QueryRow(`
+			SELECT j.id, j.task_id, j.kind, j.attempt, j.branch_name
+			FROM jobs j
+			JOIN projects p ON j.project_id = p.id
+			WHERE j.status = 'QUEUED'
+			  AND j.required_agent = ?
+			  AND j.lead_only = 0
+			  AND p.status = 'ACTIVE'
+			  AND (p.max_parallel IS NULL OR (
+			      SELECT COUNT(*) FROM jobs r WHERE r.project_id = j.project_id AND r.status = 'RUNNING'
+			  ) < p.max_parallel)
+			  AND (
+			      NOT EXISTS (SELECT 1 FROM agent_projects ap WHERE ap.agent_id = ?)
+			      OR j.project_id IN (SELECT ap2.project_id FROM agent_projects ap2 WHERE ap2.agent_id = ?)
+			  )
+			ORDER BY
+			  j.priority ASC,
+			  (CAST((SELECT COUNT(*) FROM jobs r WHERE r.project_id = j.project_id AND r.status = 'RUNNING') AS REAL) / p.weight) ASC,
+			  j.created_at ASC,
+			  j.id ASC
+			LIMIT 1`, kind, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Ghi chú bàn giao gần nhất của job
 	var handoffNote sql.NullString
-	_ = s.db.QueryRow(
+	_ = tx.QueryRow(
 		"SELECT handoff_note FROM assignments WHERE job_id = ? AND handoff_note IS NOT NULL AND handoff_note != '' ORDER BY started_at DESC LIMIT 1",
 		jobID,
 	).Scan(&handoffNote)
 
 	newAttempt := prevAttempt + 1
 	asgID := newID("asg")
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	_, err = tx.Exec(
 		"UPDATE jobs SET status = 'RUNNING', attempt = ?, current_assignment_id = ?, updated_at = ? WHERE id = ?",
@@ -1218,7 +1273,8 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 
 	// 1. Kiểm tra agent tồn tại
 	var kind, status, workerID string
-	err := s.db.QueryRow("SELECT kind, status, worker_id FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID)
+	var leadEligible int
+	err := s.db.QueryRow("SELECT kind, status, worker_id, lead_eligible FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID, &leadEligible)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Lease{}, ErrNotFound
 	}
@@ -1226,15 +1282,16 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 		return Lease{}, err
 	}
 
-	// 2. Kiểm tra worker ONLINE
+	// 2. Kiểm tra worker ONLINE & không tạm dừng
 	var connStatus string
-	err = s.db.QueryRow("SELECT conn_status FROM workers WHERE id = ?", workerID).Scan(&connStatus)
+	var paused int
+	err = s.db.QueryRow("SELECT conn_status, paused FROM workers WHERE id = ?", workerID).Scan(&connStatus, &paused)
 	if err != nil {
 		return Lease{}, err
 	}
 
-	// 3. Đủ điều kiện (BR-06)
-	if kind != KindClaude || status != "IDLE" || connStatus != "ONLINE" {
+	// 3. Đủ điều kiện (BR-06, BR-32, BR-33)
+	if kind != KindClaude || status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 {
 		return Lease{}, ErrAgentNotEligible
 	}
 
@@ -1436,7 +1493,8 @@ func (s *Service) tryAssignLeaseLocked(excludeAgent string) ([]Event, error) {
 		`SELECT a.id, a.lead_priority, a.soft_max_jobs, a.soft_window_hours, a.idle_since
 		 FROM agents a
 		 JOIN workers w ON a.worker_id = w.id
-		 WHERE a.kind = 'CLAUDE' AND a.status = 'IDLE' AND w.conn_status = 'ONLINE'`,
+		 WHERE a.kind = 'CLAUDE' AND a.status = 'IDLE' AND w.conn_status = 'ONLINE'
+		   AND w.paused = 0 AND a.lead_eligible = 1`,
 	)
 	if err != nil {
 		return nil, err
