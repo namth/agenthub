@@ -151,7 +151,7 @@ DDL đầy đủ nằm ở [features/lead-rotation.md](features/lead-rotation.md
 
 | Bảng | Mục đích |
 | :--- | :--- |
-| `agents` | Từng CLI trên máy: `kind`, `status IDLE/BUSY/COOLDOWN`, `cooldown_until`, `lead_priority`, hạn mềm |
+| `agents` | Từng CLI trên máy: `kind`, `status IDLE/BUSY/COOLDOWN`, `cooldown_until`, `lead_priority`, hạn mềm, `lead_eligible`, `auth_status OK/NEEDS_AUTH/UNKNOWN` (FEAT-06) |
 | `jobs` | Hàng đợi việc: `kind` (SPEC/DESIGN/TEST_WRITE/CODE/QA_REVIEW/REPLAN/UNBLOCK), `required_agent`, `lead_only`, `priority`, `attempt`, `project_id` |
 | `assignments` | Mỗi lần giao job cho agent; `id` là mã fencing; `handoff_note`, `wip_commit` |
 | `lead_lease` | Đúng 1 dòng: `state HELD/VACANT`, `agent_id`, `epoch`, `expires_at` |
@@ -169,5 +169,6 @@ Bảng `task_logs` chỉ lưu giữ tối đa 5000 dòng log gần nhất cho m�
 | 001 | `internal/database/migrations/001_init.sql` | Schema ban đầu (TASK-001…018) |
 | 002 | `002_multi_project.sql` | `projects.weight/max_parallel/webhook_id`, `project_members`, `agent_projects` (FEAT-04 §5) |
 | 003 | `003_join_machine.sql` | `workers.owner_user_id/version/paused`, `agents.lead_eligible`, `join_codes` (FEAT-05 §5) |
+| 004 | `004_agent_auth_office.sql` | `agents.auth_status/auth_checked_at/auth_detail`, `workers.gh_auth`, `users.last_seen_at`, đặt `lead_eligible = 0` cho agent không phải Claude (FEAT-06 §5, FEAT-02 bản 2 §5) |
 
 `database.Open` áp dụng migration chưa chạy theo `schema_migrations`; DB cũ chưa có bảng này được đánh dấu 001 trước.

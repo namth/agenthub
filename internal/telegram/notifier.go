@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,6 +141,45 @@ func (n *Notifier) Notify(e dispatcher.Event) {
 			text:   text,
 		})
 
+	case dispatcher.EvAgentAuth:
+		if e.AuthStatus == dispatcher.AuthNeeds {
+			var hint string
+			lower := strings.ToLower(e.AgentID)
+			if strings.Contains(lower, "claude") {
+				hint = "chạy `claude` → /login"
+			} else if strings.Contains(lower, "antigravity") {
+				hint = "mở agy và đăng nhập"
+			} else {
+				hint = "đăng nhập CLI"
+			}
+			text := fmt.Sprintf("🔑 %s cần đăng nhập: %s", e.AgentID, hint)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		} else if e.PrevAuthStatus == dispatcher.AuthNeeds && e.AuthStatus == dispatcher.AuthOK {
+			text := fmt.Sprintf("✅ %s đã đăng nhập lại", e.AgentID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		}
+
+	case dispatcher.EvWorkerAuth:
+		if e.AuthStatus == dispatcher.AuthNeeds {
+			text := fmt.Sprintf("🔑 GitHub CLI trên máy %s cần đăng nhập: chạy `gh auth login`", e.WorkerID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		} else if e.PrevAuthStatus == dispatcher.AuthNeeds && e.AuthStatus == dispatcher.AuthOK {
+			text := fmt.Sprintf("✅ GitHub CLI trên máy %s đã đăng nhập lại", e.WorkerID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		}
+
 	default:
 		// Các sự kiện khác bỏ qua theo đặc tả
 	}
@@ -157,6 +197,8 @@ func formatRevokeReason(reason string) string {
 		return "Admin thu hồi"
 	case dispatcher.RevokeReleased:
 		return "tự nhường vai"
+	case dispatcher.RevokeAuth:
+		return "mất quyền đăng nhập"
 	default:
 		return reason
 	}

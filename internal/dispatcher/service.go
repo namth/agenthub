@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -50,7 +51,28 @@ func newID(prefix string) string {
 	return fmt.Sprintf("%s_%s", prefix, hex.EncodeToString(b[:]))
 }
 
-// Service cài đặt interface dispatcher.API.
+var (
+	reSecretPrefix = regexp.MustCompile(`(ghp_|gho_|sk-)\S*`)
+	reLongSecret   = regexp.MustCompile(`\S{32,}`)
+)
+
+func sanitizeDetail(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = reSecretPrefix.ReplaceAllString(s, "***")
+	s = reLongSecret.ReplaceAllString(s, "***")
+	runes := []rune(s)
+	if len(runes) > 80 {
+		runes = runes[:80]
+	}
+	return string(runes)
+}
+
+// Service cài đặt interface dispatcher.API và dispatcher.AuthAPI.
+var _ API = (*Service)(nil)
+var _ AuthAPI = (*Service)(nil)
+
 type Service struct {
 	db  *sql.DB
 	clk Clock
@@ -96,6 +118,14 @@ func (s *Service) notify(events []Event) {
 // ---------- Fleet ----------
 
 func (s *Service) Connect(workerID string, kinds []string) ([]Agent, error) {
+	hellos := make([]AgentHello, len(kinds))
+	for i, k := range kinds {
+		hellos[i] = AgentHello{Kind: k}
+	}
+	return s.ConnectAuth(workerID, "", hellos)
+}
+
+func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]Agent, error) {
 	var events []Event
 	s.mu.Lock()
 	defer func() {
@@ -122,24 +152,58 @@ func (s *Service) Connect(workerID string, kinds []string) ([]Agent, error) {
 	}
 	defer tx.Rollback()
 
-	// 2. Chuyển worker sang ONLINE
-	_, err = tx.Exec(
-		"UPDATE workers SET conn_status = 'ONLINE', offline_since = NULL, last_heartbeat = ? WHERE id = ?",
-		nowStr, workerID,
-	)
+	// 2. Chuyển worker sang ONLINE, cập nhật gh_auth nếu được chỉ định
+	if ghAuth != "" {
+		_, err = tx.Exec(
+			"UPDATE workers SET conn_status = 'ONLINE', offline_since = NULL, last_heartbeat = ?, gh_auth = ? WHERE id = ?",
+			nowStr, ghAuth, workerID,
+		)
+	} else {
+		_, err = tx.Exec(
+			"UPDATE workers SET conn_status = 'ONLINE', offline_since = NULL, last_heartbeat = ? WHERE id = ?",
+			nowStr, workerID,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Đăng ký/cập nhật các agent
-	for _, kind := range kinds {
-		agentID := workerID + "/" + strings.ToLower(kind)
-		_, err = tx.Exec(
-			`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at)
-			 VALUES (?, ?, ?, 'IDLE', ?, ?)
-			 ON CONFLICT(worker_id, kind) DO UPDATE SET idle_since = COALESCE(agents.idle_since, excluded.idle_since)`,
-			agentID, workerID, kind, nowStr, nowStr,
-		)
+	for _, h := range agents {
+		if h.Kind == "" {
+			continue
+		}
+		agentID := workerID + "/" + strings.ToLower(h.Kind)
+		cleanDetail := sanitizeDetail(h.AuthDetail)
+		var detailVal any = cleanDetail
+		if cleanDetail == "" {
+			detailVal = nil
+		}
+
+		leadEligible := 1
+		if strings.EqualFold(h.Kind, KindAntigravity) {
+			leadEligible = 0
+		}
+
+		if h.AuthStatus == "" {
+			_, err = tx.Exec(
+				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, lead_eligible)
+				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?)
+				 ON CONFLICT(worker_id, kind) DO UPDATE SET idle_since = COALESCE(agents.idle_since, excluded.idle_since)`,
+				agentID, workerID, h.Kind, nowStr, nowStr, leadEligible,
+			)
+		} else {
+			_, err = tx.Exec(
+				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, auth_status, auth_detail, auth_checked_at, lead_eligible)
+				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(worker_id, kind) DO UPDATE SET
+					idle_since = COALESCE(agents.idle_since, excluded.idle_since),
+					auth_status = excluded.auth_status,
+					auth_detail = excluded.auth_detail,
+					auth_checked_at = excluded.auth_checked_at`,
+				agentID, workerID, h.Kind, nowStr, nowStr, h.AuthStatus, detailVal, nowStr, leadEligible,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +222,7 @@ func (s *Service) Connect(workerID string, kinds []string) ([]Agent, error) {
 
 	// 5. Trả danh sách agent của worker
 	rows, err := s.db.Query(
-		"SELECT id, worker_id, kind, status, cooldown_until FROM agents WHERE worker_id = ? ORDER BY id",
+		"SELECT id, worker_id, kind, status, cooldown_until, auth_status FROM agents WHERE worker_id = ? ORDER BY id",
 		workerID,
 	)
 	if err != nil {
@@ -170,13 +234,297 @@ func (s *Service) Connect(workerID string, kinds []string) ([]Agent, error) {
 	for rows.Next() {
 		var a Agent
 		var cdVal any
-		if err := rows.Scan(&a.ID, &a.WorkerID, &a.Kind, &a.Status, &cdVal); err != nil {
+		if err := rows.Scan(&a.ID, &a.WorkerID, &a.Kind, &a.Status, &cdVal, &a.AuthStatus); err != nil {
 			return nil, err
 		}
 		a.CooldownUntil = parseDBTime(cdVal)
 		result = append(result, a)
 	}
 	return result, rows.Err()
+}
+
+func (s *Service) SetAuth(workerID, agentID, status, detail string) error {
+	var events []Event
+	s.mu.Lock()
+	defer func() {
+		s.mu.Unlock()
+		s.notify(events)
+	}()
+
+	now := s.clk.Now()
+	nowStr := s.formatTime(now)
+
+	// 1. Kiểm tra agent tồn tại và quyền sở hữu
+	var agWorker, prevAuth string
+	err := s.db.QueryRow("SELECT worker_id, auth_status FROM agents WHERE id = ?", agentID).Scan(&agWorker, &prevAuth)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if agWorker != workerID {
+		return ErrAgentNotOwned
+	}
+
+	// 2. Validate status
+	if status != AuthOK && status != AuthNeeds && status != AuthUnknown {
+		return ErrInvalidAuth
+	}
+
+	cleanDetail := sanitizeDetail(detail)
+	var detailVal any = cleanDetail
+	if cleanDetail == "" {
+		detailVal = nil
+	}
+
+	_, err = s.db.Exec(
+		"UPDATE agents SET auth_status = ?, auth_detail = ?, auth_checked_at = ? WHERE id = ?",
+		status, detailVal, nowStr, agentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if status != prevAuth {
+		events = append(events, Event{
+			Type:           EvAgentAuth,
+			At:             now,
+			WorkerID:       workerID,
+			AgentID:        agentID,
+			AuthStatus:     status,
+			PrevAuthStatus: prevAuth,
+			Detail:         cleanDetail,
+		})
+	}
+
+	if status == AuthNeeds {
+		var leaseState string
+		var leaseAgent sql.NullString
+		_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
+		if leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String == agentID {
+			evs, err := s.revokeLeadLocked(RevokeAuth, false)
+			if err != nil {
+				return err
+			}
+			events = append(events, evs...)
+		}
+	} else if status == AuthOK || status == AuthUnknown {
+		var leaseState string
+		_ = s.db.QueryRow("SELECT state FROM lead_lease WHERE id = 1").Scan(&leaseState)
+		if leaseState == "VACANT" {
+			evs, err := s.tryAssignLeaseLocked("")
+			if err != nil {
+				return err
+			}
+			events = append(events, evs...)
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) SetGhAuth(workerID, status, detail string) error {
+	var events []Event
+	s.mu.Lock()
+	defer func() {
+		s.mu.Unlock()
+		s.notify(events)
+	}()
+
+	now := s.clk.Now()
+
+	// 1. Kiểm tra worker tồn tại
+	var prevGh string
+	err := s.db.QueryRow("SELECT gh_auth FROM workers WHERE id = ?", workerID).Scan(&prevGh)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	// 2. Validate status
+	if status != AuthOK && status != AuthNeeds && status != AuthUnknown {
+		return ErrInvalidAuth
+	}
+
+	cleanDetail := sanitizeDetail(detail)
+	_, err = s.db.Exec("UPDATE workers SET gh_auth = ? WHERE id = ?", status, workerID)
+	if err != nil {
+		return err
+	}
+
+	if status != prevGh {
+		events = append(events, Event{
+			Type:           EvWorkerAuth,
+			At:             now,
+			WorkerID:       workerID,
+			AuthStatus:     status,
+			PrevAuthStatus: prevGh,
+			Detail:         cleanDetail,
+		})
+	}
+
+	if status == AuthNeeds {
+		var leaseState string
+		var leaseAgent sql.NullString
+		_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
+		if leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String != "" {
+			var leadWorker string
+			_ = s.db.QueryRow("SELECT worker_id FROM agents WHERE id = ?", leaseAgent.String).Scan(&leadWorker)
+			if leadWorker == workerID {
+				evs, err := s.revokeLeadLocked(RevokeAuth, false)
+				if err != nil {
+					return err
+				}
+				events = append(events, evs...)
+			}
+		}
+	} else if status == AuthOK || status == AuthUnknown {
+		var leaseState string
+		_ = s.db.QueryRow("SELECT state FROM lead_lease WHERE id = 1").Scan(&leaseState)
+		if leaseState == "VACANT" {
+			evs, err := s.tryAssignLeaseLocked("")
+			if err != nil {
+				return err
+			}
+			events = append(events, evs...)
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) AuthRequired(workerID, agentID, assignmentID, detail, handoffNote, wipCommit string) error {
+	var events []Event
+	s.mu.Lock()
+	defer func() {
+		s.mu.Unlock()
+		s.notify(events)
+	}()
+
+	now := s.clk.Now()
+	nowStr := s.formatTime(now)
+
+	// 1. Kiểm tra agent tồn tại và quyền sở hữu
+	var agWorker, prevAuth string
+	err := s.db.QueryRow("SELECT worker_id, auth_status FROM agents WHERE id = ?", agentID).Scan(&agWorker, &prevAuth)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if agWorker != workerID {
+		return ErrAgentNotOwned
+	}
+
+	// 2. Kiểm tra assignment
+	var asgStatus, jobID string
+	var asgAttempt int
+	var asgAgentID, asgWorker string
+	var currentAsgID sql.NullString
+	var taskID string
+	err = s.db.QueryRow(`
+		SELECT a.status, a.job_id, a.attempt, a.agent_id, ag.worker_id, j.current_assignment_id, j.task_id
+		FROM assignments a
+		JOIN agents ag ON a.agent_id = ag.id
+		JOIN jobs j ON a.job_id = j.id
+		WHERE a.id = ?`, assignmentID).Scan(&asgStatus, &jobID, &asgAttempt, &asgAgentID, &asgWorker, &currentAsgID, &taskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if asgWorker != workerID || asgAgentID != agentID {
+		return ErrAgentNotOwned
+	}
+	if asgStatus != "ACTIVE" || !currentAsgID.Valid || currentAsgID.String != assignmentID {
+		return ErrStaleAssignment
+	}
+
+	cleanDetail := sanitizeDetail(detail)
+	var detailVal any = cleanDetail
+	if cleanDetail == "" {
+		detailVal = nil
+	}
+
+	var note *string
+	if handoffNote != "" {
+		note = &handoffNote
+	}
+	var wip *string
+	if wipCommit != "" {
+		wip = &wipCommit
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		"UPDATE agents SET auth_status = 'NEEDS_AUTH', auth_detail = ?, auth_checked_at = ?, status = 'IDLE', idle_since = ? WHERE id = ?",
+		detailVal, nowStr, nowStr, agentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(
+		"UPDATE assignments SET status = 'RECLAIMED', ended_at = ?, handoff_note = ?, wip_commit = ? WHERE id = ?",
+		nowStr, note, wip, assignmentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(
+		"UPDATE jobs SET status = 'QUEUED', attempt = attempt - 1, current_assignment_id = NULL, updated_at = ? WHERE id = ?",
+		nowStr, jobID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if prevAuth != AuthNeeds {
+		events = append(events, Event{
+			Type:           EvAgentAuth,
+			At:             now,
+			WorkerID:       workerID,
+			AgentID:        agentID,
+			AuthStatus:     AuthNeeds,
+			PrevAuthStatus: prevAuth,
+			Detail:         cleanDetail,
+		})
+	}
+
+	var leaseState string
+	var leaseAgent sql.NullString
+	_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
+	if leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String == agentID {
+		evs, err := s.revokeLeadLocked(RevokeAuth, false)
+		if err != nil {
+			return err
+		}
+		events = append(events, evs...)
+	}
+
+	events = append(events, Event{
+		Type:   EvJobAvailable,
+		At:     now,
+		JobID:  jobID,
+		TaskID: taskID,
+	})
+
+	return nil
 }
 
 func (s *Service) Heartbeat(workerID string) error {
@@ -614,13 +962,13 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	nowStr := s.formatTime(now)
 
 	// 1. Kiểm tra agent tồn tại
-	var agWorker, kind, status string
+	var agWorker, kind, status, authStatus, connStatus, ghAuth string
 	var paused int
 	err := s.db.QueryRow(`
-		SELECT a.worker_id, a.kind, a.status, w.paused
+		SELECT a.worker_id, a.kind, a.status, w.paused, a.auth_status, w.conn_status, w.gh_auth
 		FROM agents a
 		JOIN workers w ON a.worker_id = w.id
-		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused)
+		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused, &authStatus, &connStatus, &ghAuth)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -638,8 +986,9 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 		return nil, nil
 	}
 
-	// 3. Phải IDLE
-	if status != "IDLE" {
+	// BR-37: Agent chỉ được nhận job khi status = 'IDLE', auth_status <> 'NEEDS_AUTH',
+	// máy ONLINE, paused = 0, gh_auth <> 'NEEDS_AUTH'. UNKNOWN vẫn được nhận việc.
+	if connStatus != "ONLINE" || status != "IDLE" || authStatus == AuthNeeds || ghAuth == AuthNeeds {
 		return nil, nil
 	}
 
@@ -671,14 +1020,26 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	var branch sql.NullString
 	found := false
 
-	// 1) Agent là lead -> job lead_only trước (mọi dự án, không xét agent_projects)
+	// 1) Agent là lead -> job lead_only trước (mọi dự án, bất kể required_agent, DEC-29)
 	if isLead {
 		err = tx.QueryRow(`
-			SELECT id, task_id, kind, attempt, branch_name
-			FROM jobs
-			WHERE status = 'QUEUED' AND required_agent = ? AND lead_only = 1
-			ORDER BY priority ASC, created_at ASC, id ASC
-			LIMIT 1`, kind).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			SELECT j.id, j.task_id, j.kind, j.attempt, j.branch_name
+			FROM jobs j
+			WHERE j.status = 'QUEUED' AND j.lead_only = 1
+			  AND NOT (
+			      j.kind = 'QA_REVIEW'
+			      AND EXISTS (
+			          SELECT 1
+			          FROM assignments a_code
+			          JOIN jobs j_code ON a_code.job_id = j_code.id
+			          WHERE j_code.task_id = j.task_id
+			            AND j_code.kind = 'CODE'
+			            AND a_code.agent_id = ?
+			            AND a_code.status = 'SUBMITTED'
+			      )
+			  )
+			ORDER BY j.priority ASC, j.created_at ASC, j.id ASC
+			LIMIT 1`, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if err == nil {
 			found = true
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -704,12 +1065,24 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 			      NOT EXISTS (SELECT 1 FROM agent_projects ap WHERE ap.agent_id = ?)
 			      OR j.project_id IN (SELECT ap2.project_id FROM agent_projects ap2 WHERE ap2.agent_id = ?)
 			  )
+			  AND NOT (
+			      j.kind = 'QA_REVIEW'
+			      AND EXISTS (
+			          SELECT 1
+			          FROM assignments a_code
+			          JOIN jobs j_code ON a_code.job_id = j_code.id
+			          WHERE j_code.task_id = j.task_id
+			            AND j_code.kind = 'CODE'
+			            AND a_code.agent_id = ?
+			            AND a_code.status = 'SUBMITTED'
+			      )
+			  )
 			ORDER BY
 			  j.priority ASC,
 			  (CAST((SELECT COUNT(*) FROM jobs r WHERE r.project_id = j.project_id AND r.status = 'RUNNING') AS REAL) / p.weight) ASC,
 			  j.created_at ASC,
 			  j.id ASC
-			LIMIT 1`, kind, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			LIMIT 1`, kind, agentID, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -1272,9 +1645,9 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 	nowStr := s.formatTime(now)
 
 	// 1. Kiểm tra agent tồn tại
-	var kind, status, workerID string
+	var kind, status, workerID, authStatus string
 	var leadEligible int
-	err := s.db.QueryRow("SELECT kind, status, worker_id, lead_eligible FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID, &leadEligible)
+	err := s.db.QueryRow("SELECT kind, status, worker_id, lead_eligible, auth_status FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID, &leadEligible, &authStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Lease{}, ErrNotFound
 	}
@@ -1282,16 +1655,16 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 		return Lease{}, err
 	}
 
-	// 2. Kiểm tra worker ONLINE & không tạm dừng
-	var connStatus string
+	// 2. Kiểm tra worker ONLINE & không tạm dừng & gh_auth
+	var connStatus, ghAuth string
 	var paused int
-	err = s.db.QueryRow("SELECT conn_status, paused FROM workers WHERE id = ?", workerID).Scan(&connStatus, &paused)
+	err = s.db.QueryRow("SELECT conn_status, paused, gh_auth FROM workers WHERE id = ?", workerID).Scan(&connStatus, &paused, &ghAuth)
 	if err != nil {
 		return Lease{}, err
 	}
 
-	// 3. Đủ điều kiện (BR-06, BR-32, BR-33)
-	if kind != KindClaude || status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 {
+	// 3. Đủ điều kiện (BR-06, BR-32, BR-33, BR-37, DEC-29: bỏ điều kiện kind = CLAUDE)
+	if status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 || authStatus == AuthNeeds || ghAuth == AuthNeeds {
 		return Lease{}, ErrAgentNotEligible
 	}
 
@@ -1450,7 +1823,7 @@ func (s *Service) revokeLeadLocked(reason string, banAgent bool) ([]Event, error
 		s.isVacant = true
 		var cdVal any
 		_ = s.db.QueryRow(
-			"SELECT MIN(cooldown_until) FROM agents WHERE kind = 'CLAUDE' AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+			"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
 		).Scan(&cdVal)
 		until := parseDBTime(cdVal)
 		events = append(events, Event{
@@ -1493,8 +1866,9 @@ func (s *Service) tryAssignLeaseLocked(excludeAgent string) ([]Event, error) {
 		`SELECT a.id, a.lead_priority, a.soft_max_jobs, a.soft_window_hours, a.idle_since
 		 FROM agents a
 		 JOIN workers w ON a.worker_id = w.id
-		 WHERE a.kind = 'CLAUDE' AND a.status = 'IDLE' AND w.conn_status = 'ONLINE'
-		   AND w.paused = 0 AND a.lead_eligible = 1`,
+		 WHERE a.status = 'IDLE' AND w.conn_status = 'ONLINE'
+		   AND w.paused = 0 AND a.lead_eligible = 1
+		   AND a.auth_status <> 'NEEDS_AUTH' AND w.gh_auth <> 'NEEDS_AUTH'`,
 	)
 	if err != nil {
 		return nil, err

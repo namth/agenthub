@@ -46,6 +46,12 @@ type Config struct {
 	SelfPath        string
 	NoUpdate        bool
 	StatusFile      string
+
+	AuthChecks       map[string][]string
+	AuthPatterns     []string
+	AuthCheckEvery   time.Duration
+	AuthFreshFor     time.Duration
+	AuthCheckTimeout time.Duration
 }
 
 type agentState struct {
@@ -54,6 +60,10 @@ type agentState struct {
 	command       []string
 	status        string // "IDLE", "BUSY", "COOLDOWN"
 	cooldownUntil time.Time
+
+	authStatus    string // "OK", "NEEDS_AUTH", "UNKNOWN"
+	authDetail    string
+	authCheckedAt time.Time
 }
 
 type activeTask struct {
@@ -72,6 +82,11 @@ type Runner struct {
 	agents       map[string]*agentState
 	activeTasks  map[string]*activeTask
 	activeLeases map[string]context.CancelFunc
+
+	ghAuthStatus    string
+	ghAuthDetail    string
+	ghAuthCheckedAt time.Time
+	initAgentAuth   map[string]authInfo
 
 	sendCh   chan []byte
 	connDone chan struct{}
@@ -98,6 +113,9 @@ func New(cfg Config, exec Executor, git Git, now func() time.Time) *Runner {
 	if len(cfg.ExhaustPatterns) == 0 {
 		cfg.ExhaustPatterns = DefaultExhaustPatterns()
 	}
+	if len(cfg.AuthPatterns) == 0 {
+		cfg.AuthPatterns = DefaultAuthPatterns()
+	}
 	if cfg.DefaultCooldown == 0 {
 		cfg.DefaultCooldown = 60 * time.Minute
 	}
@@ -119,18 +137,29 @@ func New(cfg Config, exec Executor, git Git, now func() time.Time) *Runner {
 	if cfg.ReconnectMax == 0 {
 		cfg.ReconnectMax = 30 * time.Second
 	}
+	if cfg.AuthCheckEvery == 0 {
+		cfg.AuthCheckEvery = 10 * time.Minute
+	}
+	if cfg.AuthFreshFor == 0 {
+		cfg.AuthFreshFor = 60 * time.Second
+	}
+	if cfg.AuthCheckTimeout == 0 {
+		cfg.AuthCheckTimeout = 15 * time.Second
+	}
 	if cfg.OS == "" {
 		cfg.OS = runtime.GOOS
 	}
 
 	return &Runner{
-		cfg:          cfg,
-		exec:         exec,
-		git:          git,
-		now:          now,
-		agents:       make(map[string]*agentState),
-		activeTasks:  make(map[string]*activeTask),
-		activeLeases: make(map[string]context.CancelFunc),
+		cfg:           cfg,
+		exec:          exec,
+		git:           git,
+		now:           now,
+		agents:        make(map[string]*agentState),
+		activeTasks:   make(map[string]*activeTask),
+		activeLeases:  make(map[string]context.CancelFunc),
+		ghAuthStatus:  AuthUnknown,
+		initAgentAuth: make(map[string]authInfo),
 	}
 }
 
@@ -231,13 +260,60 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 		}
 	}()
 
+	// 1. Initial auth probe before HANDSHAKE
+	var ghAuthStatus = AuthUnknown
+	var ghAuthDetail = ""
+	agentAuthByKind := make(map[string]authInfo)
+
+	if r.cfg.AuthChecks != nil {
+		// Probe GH
+		if ghCmd, ok := r.cfg.AuthChecks[AuthKindGH]; ok && len(ghCmd) > 0 {
+			probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
+			var buf bytes.Buffer
+			exit, err := r.exec.Run(probeCtx, "", ghCmd, &buf)
+			cancel()
+			ghAuthStatus, ghAuthDetail = ParseAuthResult(AuthKindGH, exit, buf.String(), err)
+		}
+
+		// Probe configured agents by kind
+		for _, a := range r.cfg.Agents {
+			if _, already := agentAuthByKind[a.Kind]; already {
+				continue
+			}
+			if cmd, ok := r.cfg.AuthChecks[a.Kind]; ok && len(cmd) > 0 {
+				probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
+				var buf bytes.Buffer
+				exit, err := r.exec.Run(probeCtx, "", cmd, &buf)
+				cancel()
+				st, dt := ParseAuthResult(a.Kind, exit, buf.String(), err)
+				agentAuthByKind[a.Kind] = authInfo{status: st, detail: dt, checkedAt: r.now()}
+			} else {
+				agentAuthByKind[a.Kind] = authInfo{status: AuthUnknown, detail: "", checkedAt: r.now()}
+			}
+		}
+	} else {
+		for _, a := range r.cfg.Agents {
+			agentAuthByKind[a.Kind] = authInfo{status: AuthUnknown, detail: "", checkedAt: r.now()}
+		}
+	}
+
+	r.mu.Lock()
+	r.ghAuthStatus = ghAuthStatus
+	r.ghAuthDetail = ghAuthDetail
+	r.ghAuthCheckedAt = r.now()
+	r.initAgentAuth = agentAuthByKind
+	r.mu.Unlock()
+
 	// Gửi HANDSHAKE ban đầu
 	type handshakeAgent struct {
-		Kind string `json:"kind"`
+		Kind       string `json:"kind"`
+		AuthStatus string `json:"auth_status"`
+		AuthDetail string `json:"auth_detail,omitempty"`
 	}
 	type handshakeData struct {
 		OS      string           `json:"os"`
 		Version string           `json:"version"`
+		GhAuth  string           `json:"gh_auth"`
 		Agents  []handshakeAgent `json:"agents"`
 	}
 	type handshakeMsg struct {
@@ -247,13 +323,19 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 
 	hAgents := make([]handshakeAgent, len(r.cfg.Agents))
 	for i, a := range r.cfg.Agents {
-		hAgents[i] = handshakeAgent{Kind: a.Kind}
+		info := agentAuthByKind[a.Kind]
+		hAgents[i] = handshakeAgent{
+			Kind:       a.Kind,
+			AuthStatus: info.status,
+			AuthDetail: info.detail,
+		}
 	}
 	r.send(handshakeMsg{
 		Event: "HANDSHAKE",
 		Data: handshakeData{
 			OS:      r.cfg.OS,
 			Version: Version,
+			GhAuth:  ghAuthStatus,
 			Agents:  hAgents,
 		},
 	})
@@ -282,6 +364,26 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// Kiểm tra định kỳ Auth
+	if r.cfg.AuthChecks != nil && r.cfg.AuthCheckEvery > 0 {
+		authCtx, cancelAuth := context.WithCancel(ctx)
+		defer cancelAuth()
+		go func() {
+			ticker := time.NewTicker(r.cfg.AuthCheckEvery)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-authCtx.Done():
+					return
+				case <-connDone:
+					return
+				case <-ticker.C:
+					r.performPeriodicAuthCheck(authCtx)
+				}
+			}
+		}()
+	}
 
 	// Vòng đọc bản tin từ Gateway
 	for {
@@ -348,7 +450,10 @@ func (r *Runner) handleMessage(ctx context.Context, raw []byte) {
 		r.handleHandshakeOK(ctx, env.ServerVersion, env.Agents)
 
 	case "JOB_AVAILABLE":
-		r.handleJobAvailable()
+		r.handleJobAvailable(ctx)
+
+	case "AUTH_RECHECK":
+		go r.handleAuthRecheck(ctx, env.AgentID)
 
 	case "ASSIGN_TASK":
 		r.handleAssignTask(ctx, env.AssignmentID, env.AgentID, env.JobKind, env.Attempt, env.Payload)
@@ -395,17 +500,28 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 		}
 
 		ag, exists := r.agents[sa.ID]
+		initInfo := r.initAgentAuth[matchedCfg.Kind]
+		st := initInfo.status
+		if st == "" {
+			st = AuthUnknown
+		}
 		if !exists {
 			ag = &agentState{
-				id:      sa.ID,
-				kind:    matchedCfg.Kind,
-				command: matchedCfg.Command,
-				status:  "IDLE",
+				id:            sa.ID,
+				kind:          matchedCfg.Kind,
+				command:       matchedCfg.Command,
+				status:        "IDLE",
+				authStatus:    st,
+				authDetail:    initInfo.detail,
+				authCheckedAt: initInfo.checkedAt,
 			}
 			r.agents[sa.ID] = ag
 		} else {
 			ag.kind = matchedCfg.Kind
 			ag.command = matchedCfg.Command
+			ag.authStatus = st
+			ag.authDetail = initInfo.detail
+			ag.authCheckedAt = initInfo.checkedAt
 		}
 		if sa.Status == "COOLDOWN" {
 			ag.status = "COOLDOWN"
@@ -425,43 +541,41 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 	r.mu.Lock()
 	var toRequest []string
 	now := r.now()
-	for id, ag := range r.agents {
-		if ag.status != "BUSY" {
-			if ag.cooldownUntil.IsZero() || !now.Before(ag.cooldownUntil) {
-				ag.status = "IDLE"
-				toRequest = append(toRequest, id)
+	if r.ghAuthStatus != AuthNeeds {
+		for id, ag := range r.agents {
+			if ag.status != "BUSY" && ag.authStatus != AuthNeeds {
+				if ag.cooldownUntil.IsZero() || !now.Before(ag.cooldownUntil) {
+					ag.status = "IDLE"
+					toRequest = append(toRequest, id)
+				}
 			}
 		}
 	}
 	r.mu.Unlock()
 
 	for _, id := range toRequest {
-		r.send(map[string]any{
-			"event":    "REQUEST_TASK",
-			"agent_id": id,
-		})
+		r.maybeSendRequestTask(ctx, id)
 	}
 }
 
-func (r *Runner) handleJobAvailable() {
+func (r *Runner) handleJobAvailable(ctx context.Context) {
 	r.mu.Lock()
 	var toRequest []string
 	now := r.now()
-	for id, ag := range r.agents {
-		if ag.status != "BUSY" {
-			if ag.cooldownUntil.IsZero() || !now.Before(ag.cooldownUntil) {
-				ag.status = "IDLE"
-				toRequest = append(toRequest, id)
+	if r.ghAuthStatus != AuthNeeds {
+		for id, ag := range r.agents {
+			if ag.status != "BUSY" && ag.authStatus != AuthNeeds {
+				if ag.cooldownUntil.IsZero() || !now.Before(ag.cooldownUntil) {
+					ag.status = "IDLE"
+					toRequest = append(toRequest, id)
+				}
 			}
 		}
 	}
 	r.mu.Unlock()
 
 	for _, id := range toRequest {
-		r.send(map[string]any{
-			"event":    "REQUEST_TASK",
-			"agent_id": id,
-		})
+		go r.maybeSendRequestTask(ctx, id)
 	}
 }
 
@@ -711,10 +825,7 @@ func (r *Runner) runTask(
 		// Chờ để không xung đột với cửa sổ kiểm tra never() của test gateway
 		time.Sleep(350 * time.Millisecond)
 
-		r.send(map[string]any{
-			"event":    "REQUEST_TASK",
-			"agent_id": agentID,
-		})
+		r.maybeSendRequestTask(ctx, agentID)
 		return
 	}
 
@@ -975,14 +1086,87 @@ func (r *Runner) runTask(
 			}
 		}
 
-		r.send(map[string]any{
-			"event":    "REQUEST_TASK",
-			"agent_id": agentID,
-		})
+		r.maybeSendRequestTask(ctx, agentID)
 		return
 	}
 
-	// 4. Exit != 0 và không khớp mẫu hết limit
+	// 4. Exit != 0: Kiểm tra mẫu lỗi auth trước khi kết luận lỗi chung
+	authPatterns := r.cfg.AuthPatterns
+	if len(authPatterns) == 0 {
+		authPatterns = DefaultAuthPatterns()
+	}
+	isAuthFailed := false
+	matchedAuthLine := ""
+	for _, line := range allLines {
+		lineLower := strings.ToLower(line)
+		for _, pat := range authPatterns {
+			if strings.Contains(lineLower, strings.ToLower(pat)) {
+				isAuthFailed = true
+				matchedAuthLine = strings.TrimSpace(line)
+				break
+			}
+		}
+		if isAuthFailed {
+			break
+		}
+	}
+
+	if isAuthFailed {
+		var diffStat string
+		var wipCommit string
+
+		if branchName != "" && dir != "" {
+			diffStat = gitClient.DiffStat(context.Background(), dir)
+			msg := fmt.Sprintf("wip(task-%s): attempt %d handoff [by Runner]", taskRef(taskID, branchName), attempt)
+			sha, commitErr := gitClient.CommitWIP(context.Background(), dir, msg)
+			if commitErr == nil && sha != "" {
+				if pushErr := gitClient.Push(context.Background(), dir, branchName); pushErr == nil {
+					wipCommit = sha
+				}
+			}
+			_ = gitClient.Cleanup(context.Background(), dir)
+		}
+
+		handoffNote := BuildHandoffNote(diffStat, allLines)
+		detail := sanitizeDetail(matchedAuthLine)
+		if detail == "" {
+			detail = sanitizeDetail(firstNonEmptyLine(strings.Join(allLines, "\n")))
+		}
+
+		r.mu.Lock()
+		delete(r.activeTasks, assignmentID)
+		if ag, ok := r.agents[agentID]; ok {
+			ag.status = "IDLE"
+			ag.authStatus = AuthNeeds
+			ag.authDetail = detail
+			ag.authCheckedAt = r.now()
+		}
+		updateNeeded := r.shouldUpdateLocked()
+		r.mu.Unlock()
+
+		payload := map[string]any{
+			"event":         "AGENT_AUTH",
+			"scope":         "agent",
+			"agent_id":      agentID,
+			"auth_status":   AuthNeeds,
+			"assignment_id": assignmentID,
+			"detail":        detail,
+			"handoff_note":  handoffNote,
+			"wip_commit":    wipCommit,
+		}
+		if wipCommit == "" {
+			payload["wip_commit"] = nil
+		}
+		r.send(payload)
+		r.writeStatus(true)
+
+		if updateNeeded {
+			r.performSelfUpdate(ctx)
+		}
+		return
+	}
+
+	// 5. Exit != 0 và không khớp mẫu hết limit hay auth
 	if branchName != "" && dir != "" {
 		_ = gitClient.Cleanup(context.Background(), dir)
 	}

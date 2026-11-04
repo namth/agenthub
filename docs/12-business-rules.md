@@ -37,9 +37,9 @@ stateDiagram-v2
 | `PENDING_APPROVAL` | `PLANNING` | Bạn (Admin) | Chỉ Admin mới có quyền duyệt; Issue phải có tiêu đề và mô tả hợp lệ. |
 | `PENDING_APPROVAL` | `REJECTED` | Bạn (Admin) | Phải kèm theo lý do từ chối để thông báo cho đối tác. |
 | `PLANNING` | `READY` | Claude Code (Runner) | Phải tạo thành công ít nhất 1 Sub-issue trên GitHub kèm checklist DoD. |
-| `READY` | `IN_PROGRESS` | Task Dispatcher | Có ít nhất 1 agent `ANTIGRAVITY` ở trạng thái `IDLE` trên máy `ONLINE`. |
+| `READY` | `IN_PROGRESS` | Task Dispatcher | Có ít nhất 1 agent `ANTIGRAVITY` ở trạng thái `IDLE`, `auth_status <> NEEDS_AUTH`, trên máy `ONLINE`, không `paused`, `gh_auth <> NEEDS_AUTH` (BR-37). |
 | `IN_PROGRESS` | `WAITING_QA` | Antigravity (Runner) | Đã push code lên branch và mở thành công PR trên GitHub. |
-| `IN_PROGRESS` | `READY` | Hệ thống (Timeout Engine) | Máy `OFFLINE` liên tục 120s (BR-13), hoặc agent gửi `AGENT_EXHAUSTED` hợp lệ (BR-08). Không có log 15 phút **không** thu hồi mà sinh job `UNBLOCK` (BR-16). |
+| `IN_PROGRESS` | `READY` | Hệ thống (Timeout Engine) | Máy `OFFLINE` liên tục 120s (BR-13), hoặc agent gửi `AGENT_EXHAUSTED` hợp lệ (BR-08), hoặc `AGENT_AUTH NEEDS_AUTH` kèm `assignment_id` (BR-39 — **không** tăng `attempt`). Không có log 15 phút **không** thu hồi mà sinh job `UNBLOCK` (BR-16). |
 | `IN_PROGRESS` | `PLANNING` | Hệ thống | `attempt > MAX_ATTEMPTS` (3) → job `REPLAN` cho lead (BR-15). |
 | `WAITING_QA` | `QA_PASSED` | Claude Code (QA Lead) | GitHub Actions CI trả về `success` và Claude Code gắn tag review hợp lệ. |
 | `QA_PASSED` | `DONE` | Bạn (Admin) | PR đã được gộp (Merged) thành công vào nhánh chính `main`. |
@@ -56,5 +56,6 @@ stateDiagram-v2
 3. **Quy tắc Dọn dẹp Worktree (Clean-up Guarantee):**
    - Trước khi nhận task mới, Runner bắt buộc phải chạy lệnh kiểm tra dọn dẹp các thư mục worktree cũ để tránh rò rỉ dung lượng ổ cứng.
 4. **Quy tắc trưởng phòng trực & hết limit:** BR-01 → BR-18 ở [features/lead-rotation.md](features/lead-rotation.md) mục 7 (lease, epoch, chọn lead, trống lead, hạn mềm, cooldown, bàn giao WIP).
-5. **Quy tắc văn phòng ảo:** BR-19 → BR-23 ở [features/virtual-office.md](features/virtual-office.md) mục 7.
+5. **Quy tắc văn phòng ảo:** BR-19 → BR-23 (BR-23 sửa ở bản 2) và BR-43 → BR-46 ở [features/virtual-office.md](features/virtual-office.md) mục 7.
 6. **Đa dự án & máy của partner:** BR-24 → BR-36 ở [features/multi-project.md](features/multi-project.md) §7 và [features/join-machine.md](features/join-machine.md) §7.
+7. **Trạng thái đăng nhập & lead mọi loại agent:** BR-37 → BR-42 ở [features/agent-auth.md](features/agent-auth.md) §7 (máy trạng thái `auth_status`). BR-42 thay một phần BR-06/BR-07 (DEC-29).

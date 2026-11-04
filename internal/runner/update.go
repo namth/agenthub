@@ -218,28 +218,41 @@ func (r *Runner) writeStatus(connected bool) {
 
 	r.mu.Lock()
 	type agentEntry struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
+		ID         string `json:"id"`
+		Status     string `json:"status"`
+		AuthStatus string `json:"auth_status"`
 	}
 	agents := make([]agentEntry, 0, len(r.agents))
 	for _, ag := range r.agents {
+		st := ag.authStatus
+		if st == "" {
+			st = AuthUnknown
+		}
 		agents = append(agents, agentEntry{
-			ID:     ag.id,
-			Status: ag.status,
+			ID:         ag.id,
+			Status:     ag.status,
+			AuthStatus: st,
 		})
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
+
+	ghAuth := r.ghAuthStatus
+	if ghAuth == "" {
+		ghAuth = AuthUnknown
+	}
 
 	statusData := struct {
 		Connected bool         `json:"connected"`
 		Server    string       `json:"server"`
 		Version   string       `json:"version"`
+		GhAuth    string       `json:"gh_auth"`
 		Agents    []agentEntry `json:"agents"`
 		UpdatedAt string       `json:"updated_at"`
 	}{
 		Connected: connected,
 		Server:    r.cfg.ServerURL,
 		Version:   Version,
+		GhAuth:    ghAuth,
 		Agents:    agents,
 		UpdatedAt: r.now().UTC().Format(time.RFC3339),
 	}

@@ -1,9 +1,9 @@
 // Test nghiệm thu TASK-012 — do trưởng phòng viết, file bị khoá (tests.lock).
-// Đặc tả: docs/features/virtual-office.md §1, §3, §4 (DEC-07, DEC-08); luồng SSE theo
+// Đặc tả: docs/features/virtual-office.md §1, §3, §4 (DEC-07, DEC-08; sửa theo bản 2 — TASK-035); luồng SSE theo
 // internal/office/office_test.go.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { computeLayout, initialState, applyEvent, type Snapshot } from './model';
+import { initialState, applyEvent, type Snapshot } from './model';
 import Office from '../pages/Office';
 
 const snap: Snapshot = {
@@ -16,41 +16,7 @@ const snap: Snapshot = {
   recent: [],
 };
 
-// ---------- bố cục (TC-33) ----------
-
-describe('computeLayout', () => {
-  const machines = (n: number) =>
-    Array.from({ length: n }, (_, i) => ({ id: `m${String(i).padStart(2, '0')}`, conn_status: 'ONLINE', agents: [
-      { id: `m${i}/claude`, kind: 'CLAUDE', status: 'IDLE' }, { id: `m${i}/antigravity`, kind: 'ANTIGRAVITY', status: 'IDLE' }] }));
-
-  for (const n of [1, 3, 8]) {
-    it(`${n} máy: mỗi máy một dãy, bàn không chồng lấn, nằm trong khung`, () => {
-      const l = computeLayout(machines(n));
-      expect(l.rows.length).toBe(n);
-      const desks = l.rows.flatMap((r) => r.desks);
-      expect(desks.length).toBe(n * 2);
-      for (const d of desks) {
-        expect(d.x).toBeGreaterThanOrEqual(0);
-        expect(d.y).toBeGreaterThanOrEqual(0);
-        expect(d.x + d.w).toBeLessThanOrEqual(l.width);
-        expect(d.y + d.h).toBeLessThanOrEqual(l.height);
-      }
-      for (let i = 0; i < desks.length; i++)
-        for (let j = i + 1; j < desks.length; j++) {
-          const a = desks[i], b = desks[j];
-          const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          expect(overlap).toBe(false);
-        }
-      // Khu cố định ở hàng trên: phòng giám đốc, ghế trưởng phòng, phòng nghỉ.
-      for (const z of ['director', 'leadSeat', 'breakRoom'] as const) expect(l.zones[z]).toBeTruthy();
-    });
-  }
-
-  it('dãy sắp theo id máy, ổn định', () => {
-    const l = computeLayout([{ id: 'zeta', conn_status: 'ONLINE', agents: [] }, { id: 'alpha', conn_status: 'ONLINE', agents: [] }]);
-    expect(l.rows.map((r) => r.workerId)).toEqual(['alpha', 'zeta']);
-  });
-});
+// ---------- bố cục: bản 2 thay thế, xem office_v2.test.tsx (TC-33 sửa, DEC-25) ----------
 
 // ---------- trạng thái (TC-34, TC-35) ----------
 
@@ -147,9 +113,9 @@ afterEach(() => {
 const page = () => render(<MemoryRouter><Office /></MemoryRouter>);
 
 describe('SCR-08 Office', () => {
-  it('mở luồng /api/admin/office/stream; đang tải → aria-busy', () => {
+  it('mở luồng /api/office/stream (DEC-27); đang tải → aria-busy', () => {
     const { container } = page();
-    expect(FakeES.last?.url).toBe('/api/admin/office/stream');
+    expect(FakeES.last?.url).toBe('/api/office/stream');
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
 
@@ -163,11 +129,11 @@ describe('SCR-08 Office', () => {
     expect(screen.getByTestId('char-lap/claude').getAttribute('data-place')).toBe('lead-seat');
   });
 
-  it('rỗng → thông điệp và link đăng ký máy', () => {
+  it('rỗng → thông điệp và link thêm máy (SCR-11, bản 2)', () => {
     page();
     act(() => FakeES.last!.emit('snapshot', { lead: { state: 'VACANT', agent_id: null, epoch: 0 }, workers: [], recent: [] }));
     expect(screen.getByText('Chưa có máy nào kết nối')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Đăng ký máy/ }).getAttribute('href')).toBe('/fleet');
+    expect(screen.getByRole('link', { name: /Thêm máy/ }).getAttribute('href')).toBe('/my/machines');
   });
 
   it('mất kết nối → banner, giữ cảnh cuối', () => {

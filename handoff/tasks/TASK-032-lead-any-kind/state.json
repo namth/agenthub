@@ -1,0 +1,40 @@
+{
+  "id": "TASK-032",
+  "title": "Dispatcher: trưởng phòng mọi loại agent (DEC-29)",
+  "status": "accepted",
+  "conversation_id": "40ec89c2-2435-4542-83a0-9152343102c5",
+  "history": [
+    {
+      "at": "2026-11-04T16:27:03",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T16:44:50",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-medium)"
+    },
+    {
+      "at": "2026-11-04T16:45:10",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T16:53:21",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T16:54:30",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-032-lead-any-kind/verify.sh",
+    "internal/dispatcher/lead_any_test.go",
+    "internal/api/fleet_lead_any_test.go",
+    "internal/api/fleet_test.go"
+  ],
+  "via": "agy"
+}

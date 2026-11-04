@@ -1,0 +1,43 @@
+{
+  "id": "TASK-030",
+  "title": "Server: trạng thái đăng nhập agent (migration 004, AGENT_AUTH, guard, Telegram)",
+  "status": "accepted",
+  "conversation_id": "2c115d08-59e0-4a84-9675-a191f15ee756",
+  "history": [
+    {
+      "at": "2026-11-04T16:18:12",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T16:23:12",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T16:23:36",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T16:42:15",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T16:44:10",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-030-agent-auth-server/verify.sh",
+    "internal/dispatcher/auth_test.go",
+    "internal/gateway/auth_test.go",
+    "internal/telegram/auth_test.go",
+    "internal/machines/auth_test.go",
+    "internal/api/fleet_auth_test.go",
+    "internal/database/migrate004_test.go"
+  ],
+  "via": "agy"
+}

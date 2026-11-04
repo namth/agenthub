@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, ApiError } from '../api/client';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
 import AddMachineDialog from '../components/AddMachineDialog';
+import AuthBadge from '../components/AuthBadge';
 
 export interface AgentJob {
   job_id: string;
@@ -15,6 +16,9 @@ export interface MachineAgent {
   kind: string;
   status: string;
   projects?: string[];
+  auth_status?: 'OK' | 'NEEDS_AUTH' | 'UNKNOWN' | null;
+  auth_detail?: string | null;
+  auth_checked_at?: string | null;
   current_job?: AgentJob | null;
 }
 
@@ -25,6 +29,7 @@ export interface Machine {
   conn_status: 'ONLINE' | 'OFFLINE';
   version?: string;
   paused: boolean;
+  gh_auth?: 'OK' | 'NEEDS_AUTH' | 'UNKNOWN' | null;
   agents: MachineAgent[];
 }
 
@@ -54,6 +59,8 @@ export default function MyMachines() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [recheckSuccess, setRecheckSuccess] = useState<string | null>(null);
+  const [recheckingKey, setRecheckingKey] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -81,6 +88,33 @@ export default function MyMachines() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleRecheck = async (workerId: string, agentId?: string) => {
+    const key = agentId ? `${workerId}:${agentId}` : `${workerId}:gh`;
+    setRecheckingKey(key);
+    setActionError(null);
+    setRecheckSuccess(null);
+    try {
+      const body = agentId ? { agent_id: agentId } : {};
+      await api.post(`/api/my/machines/${workerId}/auth-recheck`, body);
+      setRecheckSuccess('Đã gửi yêu cầu kiểm lại');
+      setTimeout(() => {
+        fetchData();
+      }, 3000);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && (err.status === 409 || err.code === 'WORKER_OFFLINE')) {
+        setActionError('Máy đang offline');
+      } else if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Lỗi khi kiểm tra lại');
+      }
+    } finally {
+      setRecheckingKey(null);
+    }
+  };
 
   const handleTogglePause = async (m: Machine) => {
     setActionError(null);
@@ -212,6 +246,11 @@ export default function MyMachines() {
       </div>
 
       {actionError && <ErrorBanner message={actionError} />}
+      {recheckSuccess && (
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {recheckSuccess}
+        </div>
+      )}
 
       <div className="space-y-4">
         {machines?.map((m) => (
@@ -264,6 +303,26 @@ export default function MyMachines() {
               </div>
             </div>
 
+            {m.gh_auth === 'NEEDS_AUTH' && (
+              <div
+                role="status"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">GitHub CLI chưa đăng nhập:</span>
+                  <span>chạy <code className="font-mono bg-red-100 px-1 py-0.5 rounded text-red-900">gh auth login</code></span>
+                </div>
+                <button
+                  type="button"
+                  disabled={recheckingKey === `${m.id}:gh`}
+                  onClick={() => handleRecheck(m.id)}
+                  className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
+                >
+                  {recheckingKey === `${m.id}:gh` ? 'Đang kiểm…' : 'Đã đăng nhập, kiểm lại'}
+                </button>
+              </div>
+            )}
+
             {/* Select Project */}
             <div className="flex items-center gap-2">
               <label htmlFor={`proj-${m.id}`} className="text-xs font-medium text-slate-600">
@@ -307,6 +366,25 @@ export default function MyMachines() {
                       <span className="font-mono font-medium text-slate-900">
                         {agent.current_job.task_id}
                       </span>
+                    </div>
+                  )}
+
+                  <AuthBadge
+                    kind={agent.kind}
+                    auth_status={agent.auth_status}
+                    auth_detail={agent.auth_detail}
+                  />
+
+                  {agent.auth_status === 'NEEDS_AUTH' && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        disabled={recheckingKey === `${m.id}:${agent.id}`}
+                        onClick={() => handleRecheck(m.id, agent.id)}
+                        className="rounded border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 shadow-xs hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {recheckingKey === `${m.id}:${agent.id}` ? 'Đang kiểm…' : 'Đã đăng nhập, kiểm lại'}
+                      </button>
                     </div>
                   )}
                 </div>
