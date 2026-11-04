@@ -18,6 +18,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var (
+	Version    = "dev"
+	ErrUpdated = errors.New("UPDATED")
+)
+
 type AgentConfig struct {
 	Kind    string
 	Command []string
@@ -37,6 +42,10 @@ type Config struct {
 	ReconnectMin    time.Duration
 	ReconnectMax    time.Duration
 	OpenPR          func(ctx context.Context, dir, branch, title, body string) (prURL string, err error)
+	GitFor          func(repo string) (Git, error)
+	SelfPath        string
+	NoUpdate        bool
+	StatusFile      string
 }
 
 type agentState struct {
@@ -66,6 +75,14 @@ type Runner struct {
 
 	sendCh   chan []byte
 	connDone chan struct{}
+	conn     *websocket.Conn
+
+	serverVersion  string
+	lastUpdateFail time.Time
+	updating       bool
+	updated        bool
+
+	statusMu sync.Mutex
 }
 
 func New(cfg Config, exec Executor, git Git, now func() time.Time) *Runner {
@@ -127,7 +144,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		default:
 		}
 
-		_ = r.connectAndServe(ctx)
+		err := r.connectAndServe(ctx)
+		if errors.Is(err, ErrUpdated) {
+			return ErrUpdated
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -154,6 +174,7 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 
 	conn, _, err := dialer.DialContext(ctx, r.cfg.ServerURL, header)
 	if err != nil {
+		r.writeStatus(false)
 		return err
 	}
 	defer conn.Close()
@@ -171,6 +192,7 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 	}()
 
 	r.mu.Lock()
+	r.conn = conn
 	r.sendCh = sendCh
 	r.connDone = connDone
 	r.mu.Unlock()
@@ -178,6 +200,7 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 	defer func() {
 		close(connDone)
 		r.mu.Lock()
+		r.conn = nil
 		r.sendCh = nil
 		r.connDone = nil
 		// Dừng các goroutine gia hạn lease của kết nối này
@@ -186,6 +209,7 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 			delete(r.activeLeases, id)
 		}
 		r.mu.Unlock()
+		r.writeStatus(false)
 	}()
 
 	// Goroutine ghi duy nhất cho kết nối
@@ -212,8 +236,9 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 		Kind string `json:"kind"`
 	}
 	type handshakeData struct {
-		OS     string           `json:"os"`
-		Agents []handshakeAgent `json:"agents"`
+		OS      string           `json:"os"`
+		Version string           `json:"version"`
+		Agents  []handshakeAgent `json:"agents"`
 	}
 	type handshakeMsg struct {
 		Event string        `json:"event"`
@@ -227,8 +252,9 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 	r.send(handshakeMsg{
 		Event: "HANDSHAKE",
 		Data: handshakeData{
-			OS:     r.cfg.OS,
-			Agents: hAgents,
+			OS:      r.cfg.OS,
+			Version: Version,
+			Agents:  hAgents,
 		},
 	})
 
@@ -249,6 +275,10 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 					"event":     "PING",
 					"timestamp": r.now().UnixMilli(),
 				})
+				r.writeStatus(true)
+				if r.shouldUpdate() {
+					go r.performSelfUpdate(ctx)
+				}
 			}
 		}
 	}()
@@ -257,6 +287,12 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 	for {
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
+			r.mu.Lock()
+			updated := r.updated
+			r.mu.Unlock()
+			if updated {
+				return ErrUpdated
+			}
 			return err
 		}
 		r.handleMessage(ctx, raw)
@@ -288,14 +324,15 @@ func (r *Runner) send(v any) bool {
 
 func (r *Runner) handleMessage(ctx context.Context, raw []byte) {
 	var env struct {
-		Event        string `json:"event"`
-		Code         string `json:"code"`
-		AgentID      string `json:"agent_id"`
-		AssignmentID string `json:"assignment_id"`
-		JobKind      string `json:"job_kind"`
-		Attempt      int    `json:"attempt"`
-		Epoch        int64  `json:"epoch"`
-		Agents       []struct {
+		Event         string `json:"event"`
+		Code          string `json:"code"`
+		AgentID       string `json:"agent_id"`
+		AssignmentID  string `json:"assignment_id"`
+		JobKind       string `json:"job_kind"`
+		Attempt       int    `json:"attempt"`
+		Epoch         int64  `json:"epoch"`
+		ServerVersion string `json:"server_version"`
+		Agents        []struct {
 			ID     string `json:"id"`
 			Status string `json:"status"`
 		} `json:"agents"`
@@ -308,7 +345,7 @@ func (r *Runner) handleMessage(ctx context.Context, raw []byte) {
 
 	switch env.Event {
 	case "HANDSHAKE_OK":
-		r.handleHandshakeOK(env.Agents)
+		r.handleHandshakeOK(ctx, env.ServerVersion, env.Agents)
 
 	case "JOB_AVAILABLE":
 		r.handleJobAvailable()
@@ -337,11 +374,12 @@ func (r *Runner) handleMessage(ctx context.Context, raw []byte) {
 	}
 }
 
-func (r *Runner) handleHandshakeOK(agents []struct {
+func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, agents []struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }) {
 	r.mu.Lock()
+	r.serverVersion = serverVersion
 	for _, sa := range agents {
 		var matchedCfg *AgentConfig
 		for i := range r.cfg.Agents {
@@ -376,6 +414,13 @@ func (r *Runner) handleHandshakeOK(agents []struct {
 	r.mu.Unlock()
 
 	log.Println("runner: đã kết nối")
+	r.writeStatus(true)
+
+	if r.shouldUpdate() {
+		if r.performSelfUpdate(ctx) {
+			return
+		}
+	}
 
 	r.mu.Lock()
 	var toRequest []string
@@ -479,6 +524,7 @@ func (r *Runner) handleAssignTask(
 		BranchName  string `json:"branch_name"`
 		HandoffNote string `json:"handoff_note"`
 		Prompt      string `json:"prompt"`
+		Repo        string `json:"repo"`
 	}
 	if len(rawPayload) > 0 {
 		_ = json.Unmarshal(rawPayload, &payload)
@@ -542,6 +588,7 @@ func (r *Runner) handleAssignTask(
 		payload.BranchName,
 		prompt,
 		cmdTemplate,
+		payload.Repo,
 	)
 }
 
@@ -551,12 +598,32 @@ func (r *Runner) runTask(
 	attempt int,
 	branchName, prompt string,
 	cmdTemplate []string,
+	repo string,
 ) {
 	defer func() {
 		r.mu.Lock()
 		delete(r.activeTasks, assignmentID)
 		r.mu.Unlock()
 	}()
+
+	gitClient := r.git
+	if repo != "" && r.cfg.GitFor != nil {
+		g, err := r.cfg.GitFor(repo)
+		if err != nil {
+			r.send(map[string]any{
+				"event":         "LOG_CHUNK",
+				"assignment_id": assignmentID,
+				"chunk":         fmt.Sprintf("[runner] không chuẩn bị được repo %s: %v\n", repo, err),
+			})
+			r.mu.Lock()
+			if ag, ok := r.agents[agentID]; ok && ag.status == "BUSY" {
+				ag.status = "IDLE"
+			}
+			r.mu.Unlock()
+			return
+		}
+		gitClient = g
+	}
 
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("agenthub-%s-*", assignmentID))
 	if err != nil {
@@ -590,7 +657,7 @@ func (r *Runner) runTask(
 
 	var dir string
 	if branchName != "" {
-		dir, err = r.git.Prepare(ctx, branchName)
+		dir, err = gitClient.Prepare(ctx, branchName)
 		if err != nil {
 			log.Printf("runner: git prepare thất bại: %v", err)
 			r.mu.Lock()
@@ -625,13 +692,21 @@ func (r *Runner) runTask(
 	// 1. Task bị huỷ (ABORT_TASK hoặc timeout)
 	if ctx.Err() != nil {
 		if branchName != "" && dir != "" {
-			_ = r.git.Cleanup(context.Background(), dir)
+			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 		r.mu.Lock()
+		delete(r.activeTasks, assignmentID)
 		if ag, ok := r.agents[agentID]; ok {
 			ag.status = "IDLE"
 		}
+		updateNeeded := r.shouldUpdateLocked()
 		r.mu.Unlock()
+
+		if updateNeeded {
+			if r.performSelfUpdate(ctx) {
+				return
+			}
+		}
 
 		// Chờ để không xung đột với cửa sổ kiểm tra never() của test gateway
 		time.Sleep(350 * time.Millisecond)
@@ -667,15 +742,15 @@ func (r *Runner) runTask(
 		var wipCommit string
 
 		if branchName != "" && dir != "" {
-			diffStat = r.git.DiffStat(context.Background(), dir)
+			diffStat = gitClient.DiffStat(context.Background(), dir)
 			msg := fmt.Sprintf("wip(task-%s): attempt %d handoff [by Runner]", taskRef(taskID, branchName), attempt)
-			sha, commitErr := r.git.CommitWIP(context.Background(), dir, msg)
+			sha, commitErr := gitClient.CommitWIP(context.Background(), dir, msg)
 			if commitErr == nil && sha != "" {
-				if pushErr := r.git.Push(context.Background(), dir, branchName); pushErr == nil {
+				if pushErr := gitClient.Push(context.Background(), dir, branchName); pushErr == nil {
 					wipCommit = sha
 				}
 			}
-			_ = r.git.Cleanup(context.Background(), dir)
+			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 
 		handoffNote := BuildHandoffNote(diffStat, allLines)
@@ -690,10 +765,12 @@ func (r *Runner) runTask(
 		}
 
 		r.mu.Lock()
+		delete(r.activeTasks, assignmentID)
 		if ag, ok := r.agents[agentID]; ok {
 			ag.status = "COOLDOWN"
 			ag.cooldownUntil = cooldownUntil
 		}
+		updateNeeded := r.shouldUpdateLocked()
 		r.mu.Unlock()
 
 		payload := map[string]any{
@@ -709,6 +786,10 @@ func (r *Runner) runTask(
 			payload["wip_commit"] = nil
 		}
 		r.send(payload)
+
+		if updateNeeded {
+			r.performSelfUpdate(ctx)
+		}
 		return
 	}
 
@@ -730,13 +811,18 @@ func (r *Runner) runTask(
 						"chunk":         "[runner] thiếu file kết quả result.json\n",
 					})
 					if branchName != "" && dir != "" {
-						_ = r.git.Cleanup(context.Background(), dir)
+						_ = gitClient.Cleanup(context.Background(), dir)
 					}
 					r.mu.Lock()
+					delete(r.activeTasks, assignmentID)
 					if ag, ok := r.agents[agentID]; ok {
 						ag.status = "IDLE"
 					}
+					updateNeeded := r.shouldUpdateLocked()
 					r.mu.Unlock()
+					if updateNeeded {
+						r.performSelfUpdate(ctx)
+					}
 					return
 				}
 			} else {
@@ -746,13 +832,18 @@ func (r *Runner) runTask(
 					"chunk":         fmt.Sprintf("[runner] không thể đọc result.json: %v\n", readErr),
 				})
 				if branchName != "" && dir != "" {
-					_ = r.git.Cleanup(context.Background(), dir)
+					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
+				delete(r.activeTasks, assignmentID)
 				if ag, ok := r.agents[agentID]; ok {
 					ag.status = "IDLE"
 				}
+				updateNeeded := r.shouldUpdateLocked()
 				r.mu.Unlock()
+				if updateNeeded {
+					r.performSelfUpdate(ctx)
+				}
 				return
 			}
 		} else {
@@ -763,13 +854,18 @@ func (r *Runner) runTask(
 					"chunk":         fmt.Sprintf("[runner] result.json vượt quá 64KB (%d bytes)\n", len(resultData)),
 				})
 				if branchName != "" && dir != "" {
-					_ = r.git.Cleanup(context.Background(), dir)
+					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
+				delete(r.activeTasks, assignmentID)
 				if ag, ok := r.agents[agentID]; ok {
 					ag.status = "IDLE"
 				}
+				updateNeeded := r.shouldUpdateLocked()
 				r.mu.Unlock()
+				if updateNeeded {
+					r.performSelfUpdate(ctx)
+				}
 				return
 			}
 
@@ -781,13 +877,18 @@ func (r *Runner) runTask(
 					"chunk":         fmt.Sprintf("[runner] result.json không phải JSON hợp lệ: %v\n", err),
 				})
 				if branchName != "" && dir != "" {
-					_ = r.git.Cleanup(context.Background(), dir)
+					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
+				delete(r.activeTasks, assignmentID)
 				if ag, ok := r.agents[agentID]; ok {
 					ag.status = "IDLE"
 				}
+				updateNeeded := r.shouldUpdateLocked()
 				r.mu.Unlock()
+				if updateNeeded {
+					r.performSelfUpdate(ctx)
+				}
 				return
 			}
 
@@ -799,13 +900,18 @@ func (r *Runner) runTask(
 					"chunk":         "[runner] result.json không phải là một JSON object\n",
 				})
 				if branchName != "" && dir != "" {
-					_ = r.git.Cleanup(context.Background(), dir)
+					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
+				delete(r.activeTasks, assignmentID)
 				if ag, ok := r.agents[agentID]; ok {
 					ag.status = "IDLE"
 				}
+				updateNeeded := r.shouldUpdateLocked()
 				r.mu.Unlock()
+				if updateNeeded {
+					r.performSelfUpdate(ctx)
+				}
 				return
 			}
 
@@ -815,8 +921,8 @@ func (r *Runner) runTask(
 		var prURL string
 		if branchName != "" && dir != "" {
 			msg := fmt.Sprintf("feat(task-%s): %s attempt %d [by Runner]", taskRef(taskID, branchName), jobKind, attempt)
-			_, _ = r.git.CommitWIP(context.Background(), dir, msg)
-			_ = r.git.Push(context.Background(), dir, branchName)
+			_, _ = gitClient.CommitWIP(context.Background(), dir, msg)
+			_ = gitClient.Push(context.Background(), dir, branchName)
 
 			if jobKind == "CODE" && r.cfg.OpenPR != nil {
 				var summary string
@@ -844,7 +950,7 @@ func (r *Runner) runTask(
 				}
 			}
 
-			_ = r.git.Cleanup(context.Background(), dir)
+			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 
 		r.send(map[string]any{
@@ -856,10 +962,18 @@ func (r *Runner) runTask(
 		})
 
 		r.mu.Lock()
+		delete(r.activeTasks, assignmentID)
 		if ag, ok := r.agents[agentID]; ok {
 			ag.status = "IDLE"
 		}
+		updateNeeded := r.shouldUpdateLocked()
 		r.mu.Unlock()
+
+		if updateNeeded {
+			if r.performSelfUpdate(ctx) {
+				return
+			}
+		}
 
 		r.send(map[string]any{
 			"event":    "REQUEST_TASK",
@@ -870,7 +984,7 @@ func (r *Runner) runTask(
 
 	// 4. Exit != 0 và không khớp mẫu hết limit
 	if branchName != "" && dir != "" {
-		_ = r.git.Cleanup(context.Background(), dir)
+		_ = gitClient.Cleanup(context.Background(), dir)
 	}
 
 	r.send(map[string]any{
@@ -880,10 +994,16 @@ func (r *Runner) runTask(
 	})
 
 	r.mu.Lock()
+	delete(r.activeTasks, assignmentID)
 	if ag, ok := r.agents[agentID]; ok {
 		ag.status = "IDLE"
 	}
+	updateNeeded := r.shouldUpdateLocked()
 	r.mu.Unlock()
+
+	if updateNeeded {
+		r.performSelfUpdate(ctx)
+	}
 }
 
 type chunkWriter struct {
