@@ -11,18 +11,35 @@ import (
 	"github.com/namth/agenthub/internal/dispatcher"
 )
 
+type Option func(*Hub)
+
 type Hub struct {
 	api      dispatcher.API
 	auth     Authenticator
 	upgrader websocket.Upgrader
+
+	promptFn   func(dispatcher.Assignment) string
+	submitHook func(workerID, assignmentID, prURL string, result json.RawMessage)
 
 	mu      sync.Mutex
 	clients map[string]*clientConn
 	closed  bool
 }
 
-func New(api dispatcher.API, auth Authenticator) *Hub {
-	return &Hub{
+func WithPrompt(fn func(dispatcher.Assignment) string) Option {
+	return func(h *Hub) {
+		h.promptFn = fn
+	}
+}
+
+func WithSubmitHook(fn func(workerID, assignmentID, prURL string, result json.RawMessage)) Option {
+	return func(h *Hub) {
+		h.submitHook = fn
+	}
+}
+
+func New(api dispatcher.API, auth Authenticator, opts ...Option) *Hub {
+	h := &Hub{
 		api:  api,
 		auth: auth,
 		upgrader: websocket.Upgrader{
@@ -30,6 +47,10 @@ func New(api dispatcher.API, auth Authenticator) *Hub {
 		},
 		clients: make(map[string]*clientConn),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *Hub) Close() error {

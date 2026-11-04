@@ -1,0 +1,41 @@
+{
+  "id": "TASK-014",
+  "title": "Pipeline: prompt cho agent, chuyển trạng thái task theo kết quả job (DEC-12)",
+  "status": "accepted",
+  "conversation_id": "713546bb-38b1-446a-99c1-e7f33733c689",
+  "history": [
+    {
+      "at": "2026-11-04T09:14:53",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T09:15:39",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T09:15:51",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:24:57",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:26:06",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-014-pipeline/verify.sh",
+    "internal/pipeline/pipeline_test.go",
+    "internal/gateway/hooks_test.go",
+    "internal/gateway/gateway_test.go",
+    "internal/gateway/register_test.go"
+  ],
+  "via": "agy"
+}
