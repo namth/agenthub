@@ -1,7 +1,7 @@
 {
   "id": "TASK-025",
   "title": "Trang Đóng góp: API tổng hợp theo partner/dự án + dòng thời gian, SCR-10",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "0b42aab5-c2a7-4d0a-af15-62091db9ad82",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T12:12:01",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T12:15:22",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
