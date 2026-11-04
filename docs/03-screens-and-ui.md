@@ -10,10 +10,10 @@
 | **SCR-02** | Bảng Kanban Điều phối | Tất cả (RBAC) | `/` hoặc `/kanban` | `src/pages/Kanban.tsx` | 5 cột: Backlog, Planning, In-Progress, QA/Review, Done. Drag-drop hoặc action buttons. |
 | **SCR-03** | Form Tạo Yêu Cầu Mới | Tất cả | `/tasks/new` | `src/pages/TaskCreate.tsx` | Form nhập Tiêu đề, Mô tả mong muốn, Phạm vi, Upload ảnh mockup. |
 | **SCR-04** | Chi Tiết Task & Lộ Trình | Tất cả | `/tasks/:id` | `src/pages/TaskDetail.tsx` | Hiển thị Issue gốc, danh sách Sub-tasks, PR liên kết, nút Duyệt (Admin). |
-| **SCR-05** | Quản Trị Cụm Máy (Fleet) | Chỉ Admin | `/fleet` | `src/pages/Fleet.tsx` | Danh sách máy và agent: Tên, OS, kết nối, từng agent (Claude/Antigravity) với trạng thái IDLE/BUSY/COOLDOWN + đếm ngược, thẻ Lead (epoch, gia hạn), nút Trao/Thu hồi vai, drawer sửa ưu tiên & hạn mềm, nút xem Log (FEAT-01). Design: SPEC_ONLY · Code: TODO |
+| **SCR-05** | Quản Trị Cụm Máy (Fleet) | Chỉ Admin | `/fleet` | `src/pages/Fleet.tsx` | Danh sách máy và agent: Tên, OS, kết nối, từng agent (Claude/Antigravity) với trạng thái IDLE/BUSY/COOLDOWN + đếm ngược, thẻ Lead (epoch, gia hạn), nút Trao/Thu hồi vai, drawer sửa ưu tiên & hạn mềm, nút xem Log (FEAT-01). Design: SPEC_ONLY · Code: DONE |
 | **SCR-06** | Live Terminal Console | Chỉ Admin | `/fleet/:id/terminal` | `src/pages/LiveTerminal.tsx` | Màn hình đen giả lập terminal (xterm.js), hiển thị ANSI logs real-time từ máy con. |
 | **SCR-07** | Cài Đặt Hệ Thống | Chỉ Admin | `/settings` | `src/pages/Settings.tsx` | Cấu hình Telegram Bot Token, Chat ID, GitHub Repo kết nối; công tắc "Bật văn phòng ảo" (FEAT-02). |
-| **SCR-08** | Văn Phòng Ảo | Chỉ Admin (khi bật) | `/office` | `src/pages/Office.tsx` | Văn phòng pixel-art chỉ quan sát: dãy bàn theo máy, ghế Trưởng phòng theo lead, phòng nghỉ cho COOLDOWN, hoạt cảnh giao/nộp/review/chuyển giao (FEAT-02). Design: SPEC_ONLY · Code: TODO |
+| **SCR-08** | Văn Phòng Ảo | Chỉ Admin (khi bật) | `/office` | `src/pages/Office.tsx` | Văn phòng pixel-art chỉ quan sát: dãy bàn theo máy, ghế Trưởng phòng theo lead, phòng nghỉ cho COOLDOWN, hoạt cảnh giao/nộp/review/chuyển giao (FEAT-02). Design: SPEC_ONLY · Code: DONE |
 
 ---
 

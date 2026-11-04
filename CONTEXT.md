@@ -29,6 +29,14 @@ agenthub/
 │   ├── database/                 # SQLite connection & migrations
 │   ├── dispatcher/               # Task Queue & phân bổ việc cho Worker
 │   ├── gateway/                  # WebSocket Hub (quản lý kết nối các máy con)
+│   ├── api/                      # REST Fleet & quản trị trưởng phòng
+│   ├── auth/                     # GitHub OAuth, JWT, RBAC (thay cho dòng auth ở trên)
+│   ├── tasks/                    # Tasks/Kanban, GitHub Issues, webhook, tasks.Service
+│   ├── pipeline/                 # Prompt cho agent, chuyển trạng thái task theo result.json (DEC-12)
+│   ├── runner/                   # Runner daemon `agenthub runner` (DEC-10)
+│   ├── logs/                     # Lưu & stream log job
+│   ├── office/                   # Văn phòng ảo: event bus + SSE (FEAT-02)
+│   └── e2e/                      # Test trọn dây chuyền
 │   ├── github/                   # GitHub API Client & Webhook Handlers
 │   └── telegram/                 # Telegram Bot alerts & inline approval
 ├── web/                          # Frontend source code (Vite + React + Tailwind)
