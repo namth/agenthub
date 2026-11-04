@@ -1,7 +1,7 @@
 {
   "id": "TASK-027",
   "title": "Dispatcher đa dự án: chia lượt theo weight, max_parallel, danh sách dự án của agent, máy tạm dừng, lead_eligible",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "06384d74-9f79-450f-ab03-951ad0dffc1f",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T12:00:32",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T12:02:10",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
