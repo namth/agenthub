@@ -1,7 +1,7 @@
 {
   "id": "TASK-046",
   "title": "Token cá nhân, MCP /mcp và SCR-12 Hồ sơ",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "8528483b-8456-4fbc-9ef5-14f0b6a5bc3d",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T22:15:50",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:17:37",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
