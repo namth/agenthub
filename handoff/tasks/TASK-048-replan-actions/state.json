@@ -1,0 +1,20 @@
+{
+  "id": "TASK-048",
+  "title": "REPLAN/UNBLOCK có hành động + đề xuất huỷ chờ Admin",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T22:18:42",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-048-replan-actions/verify.sh",
+    "internal/pipeline/replan_test.go",
+    "internal/tasks/proposals_test.go",
+    "internal/telegram/proposals_test.go",
+    "web/src/pages/proposal.test.tsx"
+  ]
+}
