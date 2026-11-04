@@ -1,0 +1,17 @@
+{
+  "id": "TASK-007",
+  "title": "Tasks API (Kanban, tạo yêu cầu, duyệt/từ chối) + GitHub Issues + webhook",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T08:41:26",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-007-tasks-github/verify.sh",
+    "internal/tasks/tasks_test.go"
+  ]
+}
