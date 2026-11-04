@@ -113,3 +113,4 @@ CREATE INDEX idx_jobs_project_status ON jobs(project_id, status);
 | **TASK-027** | Dispatcher: chia lượt theo weight, `max_parallel`, `agent_projects`, máy tạm dừng, `lead_eligible` | TC-41 → TC-43, TC-51, TC-53 |
 | **TASK-021** | Runner đa repo (`payload.repo`, clone cache, bỏ `--repo`) | TC-44; test runner cũ xanh |
 | **TASK-022** | UI: ô chọn dự án, SCR-09, Kanban/Tạo yêu cầu theo dự án, gán dự án cho agent | vitest + typecheck + build |
+| **TASK-028** | API bổ sung cho UI: `GET /api/fleet` (chủ máy, phiên bản, paused, `lead_eligible`, dự án agent, dự án của việc đang chạy), `PATCH /api/admin/agents/{id}` nhận `lead_eligible`/`projects`, `open_tasks`, `POST /api/admin/projects/{id}/webhook` | test Go `internal/api`, `internal/projects` |

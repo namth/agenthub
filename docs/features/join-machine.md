@@ -116,3 +116,4 @@ CREATE TABLE join_codes (
 | **TASK-023** | Migration 003, mã tham gia, `/api/fleet/join`, `/install.sh`, `/download`, máy của tôi (API), paused/gỡ, `lead_eligible`, runner `--status` + tự cập nhật | TC-46 → TC-55 |
 | **TASK-024** | UI: hộp thoại Thêm máy (lệnh + hướng dẫn agent), SCR-11 Máy của tôi, SCR-05 nhóm theo chủ + công tắc trưởng phòng | vitest + typecheck + build |
 | **TASK-025** | Đóng góp: API + SCR-10 | TC-56 + vitest |
+| **TASK-029** | Gateway: `HANDSHAKE_OK.server_version`, lưu `HANDSHAKE.data.version` vào `workers.version`, `Hub.CloseWorker` cho gỡ máy (BR-32) | test Go `internal/gateway` |

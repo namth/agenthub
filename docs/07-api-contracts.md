@@ -38,8 +38,8 @@ Tất cả các API REST trả về định dạng chuẩn:
 ### 1.3 Nhóm Quản lý Cụm máy (Fleet Management)
 * **`GET /api/fleet`**:
   - Quyền: Chỉ `ADMIN`.
-  - Trả về `lead` (state, agent_id, epoch, expires_at, eta) và danh sách máy, mỗi máy kèm `agents[]` (kind, status, cooldown_until, lead_priority, hạn mềm, current_job). Chi tiết: FEAT-01 mục 6.3.
-* **`POST /api/admin/lead/assign`** · **`POST /api/admin/lead/revoke`** · **`PATCH /api/admin/agents/:id`**: Chỉ `ADMIN` (FEAT-01).
+  - Trả về `lead` (state, agent_id, epoch, expires_at, eta) và danh sách máy, mỗi máy kèm `owner` (`{id, login}` hoặc `null` = Hệ thống), `version`, `paused` và `agents[]` (kind, status, cooldown_until, lead_priority, hạn mềm, `lead_eligible`, `projects` — mảng id hoặc `null` = mọi dự án, current_job gồm `project_id`, `project`, `task_title`). Chi tiết: FEAT-01 mục 6.3, FEAT-05 §4.
+* **`POST /api/admin/lead/assign`** · **`POST /api/admin/lead/revoke`** · **`PATCH /api/admin/agents/:id`**: Chỉ `ADMIN` (FEAT-01). `PATCH` nhận thêm `lead_eligible` (boolean) và `projects` (mảng id dự án thay thế toàn bộ; `null`/`[]` = mọi dự án; id không tồn tại → 400).
 
 ### 1.4 Nhóm Cài đặt & Văn phòng ảo (FEAT-02)
 * **`GET/PATCH /api/admin/settings`**: Chỉ `ADMIN`; gồm `office_enabled`.
@@ -129,4 +129,4 @@ Giao tiếp hai chiều thời gian thực giữa Go Orchestrator và Runner Cli
 * Payload đầy đủ: [features/lead-rotation.md](features/lead-rotation.md) mục 6.1–6.2.
 
 ## 3. API ĐA DỰ ÁN & MÁY (FEAT-04, FEAT-05)
-Chi tiết: [features/multi-project.md](features/multi-project.md) §6 và [features/join-machine.md](features/join-machine.md) §6. Gồm `GET /api/projects`, `GET /api/admin/github/repos`, `POST /api/admin/projects`, `PATCH /api/admin/projects/{id}`, `GET /api/tasks?project_id=`, `POST /api/fleet/join-codes`, `POST /api/fleet/join`, `GET /install.sh`, `GET /download/agenthub-{os}-{arch}`, `GET/PATCH/DELETE /api/my/machines/{id}`, `GET /api/contributions`, `GET /api/contributions/timeline`; WS `ASSIGN_TASK.payload.repo`, `HANDSHAKE.data.version`, `HANDSHAKE_OK.server_version`.
+Chi tiết: [features/multi-project.md](features/multi-project.md) §6 và [features/join-machine.md](features/join-machine.md) §6. Gồm `GET /api/projects` (mỗi dự án có `open_tasks` = số task gốc chưa DONE/REJECTED), `GET /api/admin/github/repos`, `POST /api/admin/projects`, `PATCH /api/admin/projects/{id}`, `POST /api/admin/projects/{id}/webhook` (tạo lại webhook; GitHub lỗi → 502 `GITHUB_ERROR`), `GET /api/tasks?project_id=`, `POST /api/fleet/join-codes`, `POST /api/fleet/join`, `GET /install.sh`, `GET /download/agenthub-{os}-{arch}`, `GET/PATCH/DELETE /api/my/machines/{id}`, `GET /api/contributions`, `GET /api/contributions/timeline`; WS `ASSIGN_TASK.payload.repo`, `HANDSHAKE.data.version`, `HANDSHAKE_OK.server_version`.
