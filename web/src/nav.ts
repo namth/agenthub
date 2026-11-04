@@ -19,7 +19,7 @@ export const NAV: NavItem[] = [
   { code: 'SCR-09', label: 'Dự án', path: '/projects', roles: ['ADMIN'], inSidebar: true },
   { code: 'SCR-05', label: 'Cụm máy', path: '/fleet', roles: ['ADMIN'], inSidebar: true },
   { code: 'SCR-06', label: 'Live terminal', path: '/fleet/:id/terminal', roles: ['ADMIN'], inSidebar: false },
-  { code: 'SCR-08', label: 'Văn phòng', path: '/office', roles: ['ADMIN'], inSidebar: true, requiresOffice: true },
+  { code: 'SCR-08', label: 'Văn phòng', path: '/office', roles: ['ADMIN', 'PARTNER'], inSidebar: true, requiresOffice: true },
   { code: 'SCR-07', label: 'Cài đặt', path: '/settings', roles: ['ADMIN'], inSidebar: true },
 ];
 

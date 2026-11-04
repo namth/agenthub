@@ -1,13 +1,28 @@
 {
   "id": "TASK-035",
   "title": "Office UI bản 2: hai cụm bàn, khu chỉ huy, nội thất, logo INOVA",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "ad955ed8-d88d-410d-b52d-7b9bcfea579a",
   "history": [
     {
       "at": "2026-11-04T16:36:17",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T16:38:16",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T16:38:26",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T16:56:21",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
@@ -15,5 +30,6 @@
     "web/src/office/office_v2.test.tsx",
     "web/src/office/office.test.tsx",
     "web/src/nav.test.ts"
-  ]
+  ],
+  "via": "agy"
 }
