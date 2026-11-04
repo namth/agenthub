@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/namth/agenthub/internal/skills"
 )
 
 var (
@@ -825,19 +826,6 @@ func (r *Runner) runTask(
 		resultFile = filepath.Join(tmpDir, "result.json")
 	}
 
-	var instruction string
-	switch jobKind {
-	case "SPEC":
-		instruction = "Ghi kết quả JSON dạng {\"subtasks\":[{\"title\":\"...\",\"description\":\"...\",\"dod\":\"...\"}]} vào file trên."
-	case "QA_REVIEW":
-		instruction = "Ghi kết quả JSON dạng {\"verdict\":\"PASS\"|\"CHANGES\",\"comments\":\"...\"} vào file trên."
-	case "CODE":
-		instruction = "Tuỳ chọn: ghi kết quả JSON dạng {\"summary\":\"...\"} vào file trên."
-	default:
-		instruction = "Ghi kết quả JSON vào file trên."
-	}
-	prompt += fmt.Sprintf("\n\nAGENTHUB_RESULT_FILE=%s\n%s", resultFile, instruction)
-
 	var dir string
 	if branchName != "" {
 		dir, err = gitClient.Prepare(ctx, branchName)
@@ -850,7 +838,72 @@ func (r *Runner) runTask(
 			r.mu.Unlock()
 			return
 		}
+	} else if s, ok := gitClient.(Snapshotter); ok {
+		snapDir, err := s.Snapshot(ctx, tmpDir)
+		if err != nil {
+			log.Printf("runner: git snapshot thất bại: %v", err)
+			dir = ""
+		} else {
+			dir = snapDir
+		}
 	}
+
+	var skillPath string
+	if jobKind == "SPEC" || jobKind == "REPLAN" || jobKind == "UNBLOCK" {
+		base := dir
+		if base == "" {
+			base = tmpDir
+		}
+
+		projectSkill := ""
+		if dir != "" {
+			cand := filepath.Join(dir, ".agents", "skills", "agenthub-spec", "SKILL.md")
+			if _, err := os.Stat(cand); err == nil {
+				projectSkill = cand
+			}
+		}
+
+		if projectSkill != "" {
+			if abs, err := filepath.Abs(projectSkill); err == nil {
+				skillPath = abs
+			} else {
+				skillPath = projectSkill
+			}
+		} else {
+			embeddedFiles := skills.Files()
+			for relPath, content := range embeddedFiles {
+				dest := filepath.Join(base, ".agenthub", "skills", relPath)
+				if err := os.MkdirAll(filepath.Dir(dest), 0o755); err == nil {
+					_ = os.WriteFile(dest, []byte(content), 0o644)
+				}
+			}
+			gitignorePath := filepath.Join(base, ".agenthub", ".gitignore")
+			_ = os.WriteFile(gitignorePath, []byte("*\n"), 0o644)
+
+			targetSkill := filepath.Join(base, ".agenthub", "skills", "agenthub-spec", "SKILL.md")
+			if abs, err := filepath.Abs(targetSkill); err == nil {
+				skillPath = abs
+			} else {
+				skillPath = targetSkill
+			}
+		}
+	}
+
+	var instruction string
+	switch jobKind {
+	case "SPEC":
+		instruction = "Ghi kết quả JSON theo skill: {\"status\":\"NEED_INFO\",\"questions\":[…]} hoặc {\"status\":\"DONE\",\"subtasks\":[…]} vào file trên."
+	case "QA_REVIEW":
+		instruction = "Ghi kết quả JSON dạng {\"verdict\":\"PASS\"|\"CHANGES\",\"comments\":\"...\"} vào file trên."
+	case "CODE":
+		instruction = "Tuỳ chọn: ghi kết quả JSON dạng {\"summary\":\"...\"} vào file trên."
+	default:
+		instruction = "Ghi kết quả JSON vào file trên."
+	}
+	if skillPath != "" {
+		prompt += fmt.Sprintf("\n\nAGENTHUB_SKILL=%s\nĐọc và tuân thủ file skill trên trước khi làm.", skillPath)
+	}
+	prompt += fmt.Sprintf("\n\nAGENTHUB_RESULT_FILE=%s\n%s", resultFile, instruction)
 
 	argv := make([]string, len(cmdTemplate))
 	hasPrompt := false
@@ -939,7 +992,7 @@ func (r *Runner) runTask(
 
 	// 1. Task bị huỷ (ABORT_TASK hoặc timeout)
 	if ctx.Err() != nil {
-		if branchName != "" && dir != "" {
+		if dir != "" {
 			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 		r.mu.Lock()
@@ -995,6 +1048,8 @@ func (r *Runner) runTask(
 					wipCommit = sha
 				}
 			}
+			_ = gitClient.Cleanup(context.Background(), dir)
+		} else if dir != "" {
 			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 
@@ -1055,7 +1110,7 @@ func (r *Runner) runTask(
 						"assignment_id": assignmentID,
 						"chunk":         "[runner] thiếu file kết quả result.json\n",
 					})
-					if branchName != "" && dir != "" {
+					if dir != "" {
 						_ = gitClient.Cleanup(context.Background(), dir)
 					}
 					r.mu.Lock()
@@ -1076,7 +1131,7 @@ func (r *Runner) runTask(
 					"assignment_id": assignmentID,
 					"chunk":         fmt.Sprintf("[runner] không thể đọc result.json: %v\n", readErr),
 				})
-				if branchName != "" && dir != "" {
+				if dir != "" {
 					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
@@ -1098,7 +1153,7 @@ func (r *Runner) runTask(
 					"assignment_id": assignmentID,
 					"chunk":         fmt.Sprintf("[runner] result.json vượt quá 64KB (%d bytes)\n", len(resultData)),
 				})
-				if branchName != "" && dir != "" {
+				if dir != "" {
 					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
@@ -1121,7 +1176,7 @@ func (r *Runner) runTask(
 					"assignment_id": assignmentID,
 					"chunk":         fmt.Sprintf("[runner] result.json không phải JSON hợp lệ: %v\n", err),
 				})
-				if branchName != "" && dir != "" {
+				if dir != "" {
 					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
@@ -1144,7 +1199,7 @@ func (r *Runner) runTask(
 					"assignment_id": assignmentID,
 					"chunk":         "[runner] result.json không phải là một JSON object\n",
 				})
-				if branchName != "" && dir != "" {
+				if dir != "" {
 					_ = gitClient.Cleanup(context.Background(), dir)
 				}
 				r.mu.Lock()
@@ -1195,6 +1250,8 @@ func (r *Runner) runTask(
 				}
 			}
 
+			_ = gitClient.Cleanup(context.Background(), dir)
+		} else if dir != "" {
 			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 
@@ -1259,6 +1316,8 @@ func (r *Runner) runTask(
 				}
 			}
 			_ = gitClient.Cleanup(context.Background(), dir)
+		} else if dir != "" {
+			_ = gitClient.Cleanup(context.Background(), dir)
 		}
 
 		handoffNote := BuildHandoffNote(diffStat, allLines)
@@ -1301,7 +1360,7 @@ func (r *Runner) runTask(
 	}
 
 	// 5. Exit != 0 và không khớp mẫu hết limit hay auth
-	if branchName != "" && dir != "" {
+	if dir != "" {
 		_ = gitClient.Cleanup(context.Background(), dir)
 	}
 
