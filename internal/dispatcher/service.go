@@ -773,6 +773,85 @@ func (s *Service) Tick() error {
 		}
 	}
 
+	// 2b. Assignment ACTIVE trên máy partner mà chủ máy mất tư cách thành viên dự án (DEC-37, BR-58)
+	rows, err = s.db.Query(
+		`SELECT a.id, a.job_id, a.agent_id, a.attempt, j.task_id, j.project_id
+		 FROM assignments a
+		 JOIN agents ag ON a.agent_id = ag.id
+		 JOIN workers w ON ag.worker_id = w.id
+		 JOIN users u ON w.owner_user_id = u.id
+		 JOIN jobs j ON a.job_id = j.id
+		 WHERE a.status = 'ACTIVE'
+		   AND w.owner_user_id IS NOT NULL
+		   AND u.role <> 'ADMIN'
+		   AND NOT EXISTS (
+		       SELECT 1 FROM project_members pm
+		       WHERE pm.project_id = j.project_id AND pm.user_id = w.owner_user_id
+		   )`,
+	)
+	if err != nil {
+		return err
+	}
+	var toReclaimMembership []reclaimInfo
+	for rows.Next() {
+		var ri reclaimInfo
+		if err := rows.Scan(&ri.asgID, &ri.jobID, &ri.agentID, &ri.attempt, &ri.taskID, &ri.projectID); err != nil {
+			rows.Close()
+			return err
+		}
+		toReclaimMembership = append(toReclaimMembership, ri)
+	}
+	rows.Close()
+
+	for _, ri := range toReclaimMembership {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec("UPDATE assignments SET status = 'RECLAIMED', ended_at = ? WHERE id = ?", nowStr, ri.asgID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		_, err = tx.Exec("UPDATE agents SET status = 'IDLE', idle_since = ? WHERE id = ?", nowStr, ri.agentID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		_, err = tx.Exec("UPDATE jobs SET status = 'QUEUED', current_assignment_id = NULL, updated_at = ? WHERE id = ?", nowStr, ri.jobID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+
+		events = append(events, Event{
+			Type:         EvJobReclaimed,
+			At:           now,
+			JobID:        ri.jobID,
+			AssignmentID: ri.asgID,
+		})
+		events = append(events, Event{
+			Type:         EvAbortTask,
+			At:           now,
+			AgentID:      ri.agentID,
+			AssignmentID: ri.asgID,
+			Reason:       "membership_lost",
+		})
+		events = append(events, Event{
+			Type:   EvJobAvailable,
+			At:     now,
+			JobID:  ri.jobID,
+			TaskID: ri.taskID,
+		})
+	}
+
 	// 3. Máy của lead tạm dừng -> thu hồi RELEASED (BR-32)
 	var leaseState string
 	var leaseAgent sql.NullString
@@ -964,11 +1043,14 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	// 1. Kiểm tra agent tồn tại
 	var agWorker, kind, status, authStatus, connStatus, ghAuth string
 	var paused int
+	var ownerUserID, userRole sql.NullString
 	err := s.db.QueryRow(`
-		SELECT a.worker_id, a.kind, a.status, w.paused, a.auth_status, w.conn_status, w.gh_auth
+		SELECT a.worker_id, a.kind, a.status, w.paused, a.auth_status, w.conn_status, w.gh_auth,
+		       w.owner_user_id, u.role
 		FROM agents a
 		JOIN workers w ON a.worker_id = w.id
-		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused, &authStatus, &connStatus, &ghAuth)
+		LEFT JOIN users u ON w.owner_user_id = u.id
+		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused, &authStatus, &connStatus, &ghAuth, &ownerUserID, &userRole)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1002,6 +1084,12 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 		return nil, nil
 	}
 
+	isPartner := ownerUserID.Valid && ownerUserID.String != "" && userRole.Valid && userRole.String != "ADMIN"
+	partnerOwner := ""
+	if isPartner {
+		partnerOwner = ownerUserID.String
+	}
+
 	// 5. Kiểm tra lead
 	var leaseState string
 	var leaseAgent sql.NullString
@@ -1022,7 +1110,7 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 
 	// 1) Agent là lead -> job lead_only trước (mọi dự án, bất kể required_agent, DEC-29)
 	if isLead {
-		err = tx.QueryRow(`
+		leadQuery := `
 			SELECT j.id, j.task_id, j.kind, j.attempt, j.branch_name
 			FROM jobs j
 			WHERE j.status = 'QUEUED' AND j.lead_only = 1
@@ -1037,9 +1125,16 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 			            AND a_code.agent_id = ?
 			            AND a_code.status = 'SUBMITTED'
 			      )
-			  )
+			  )`
+		leadArgs := []any{agentID}
+		if isPartner {
+			leadQuery += ` AND j.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+			leadArgs = append(leadArgs, partnerOwner)
+		}
+		leadQuery += `
 			ORDER BY j.priority ASC, j.created_at ASC, j.id ASC
-			LIMIT 1`, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			LIMIT 1`
+		err = tx.QueryRow(leadQuery, leadArgs...).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if err == nil {
 			found = true
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -1050,7 +1145,7 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	// 2) Còn lại: job QUEUED đúng required_agent, lead_only = 0, thuộc dự án status = 'ACTIVE',
 	// chưa đạt max_parallel, và nằm trong agent_projects của agent (agent không có dòng nào = mọi dự án).
 	if !found {
-		err = tx.QueryRow(`
+		normQuery := `
 			SELECT j.id, j.task_id, j.kind, j.attempt, j.branch_name
 			FROM jobs j
 			JOIN projects p ON j.project_id = p.id
@@ -1064,7 +1159,13 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 			  AND (
 			      NOT EXISTS (SELECT 1 FROM agent_projects ap WHERE ap.agent_id = ?)
 			      OR j.project_id IN (SELECT ap2.project_id FROM agent_projects ap2 WHERE ap2.agent_id = ?)
-			  )
+			  )`
+		normArgs := []any{kind, agentID, agentID}
+		if isPartner {
+			normQuery += ` AND j.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+			normArgs = append(normArgs, partnerOwner)
+		}
+		normQuery += `
 			  AND NOT (
 			      j.kind = 'QA_REVIEW'
 			      AND EXISTS (
@@ -1082,7 +1183,10 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 			  (CAST((SELECT COUNT(*) FROM jobs r WHERE r.project_id = j.project_id AND r.status = 'RUNNING') AS REAL) / p.weight) ASC,
 			  j.created_at ASC,
 			  j.id ASC
-			LIMIT 1`, kind, agentID, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			LIMIT 1`
+		normArgs = append(normArgs, agentID)
+
+		err = tx.QueryRow(normQuery, normArgs...).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
