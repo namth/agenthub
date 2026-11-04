@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Empty, ErrorBanner, Loading } from '../components/StateView';
 import AddMachineDialog from '../components/AddMachineDialog';
+import AuthBadge from '../components/AuthBadge';
 
 export interface LeadState {
   state: 'HELD' | 'VACANT';
@@ -25,6 +26,9 @@ export interface Agent {
   jobs_in_window: number;
   lead_eligible?: boolean;
   projects?: string[] | null;
+  auth_status?: 'OK' | 'NEEDS_AUTH' | 'UNKNOWN' | null;
+  auth_detail?: string | null;
+  auth_checked_at?: string | null;
   current_job: {
     job_id: string;
     task_id: string;
@@ -50,6 +54,7 @@ export interface Worker {
   owner?: Owner | null;
   version?: string;
   paused?: boolean;
+  gh_auth?: 'OK' | 'NEEDS_AUTH' | 'UNKNOWN' | null;
   agents: Agent[];
 }
 
@@ -94,6 +99,8 @@ export default function Fleet() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [recheckSuccess, setRecheckSuccess] = useState<string | null>(null);
+  const [recheckingKey, setRecheckingKey] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const fetchFleet = useCallback(async () => {
@@ -121,9 +128,36 @@ export default function Fleet() {
 
   useEffect(() => {
     api.get<Project[]>('/api/projects')
-      .then((res) => setProjects(res || []))
-      .catch(() => {});
+      .then((res) => setProjects(Array.isArray(res) ? res : []))
+      .catch(() => setProjects([]));
   }, []);
+
+  const handleRecheck = async (workerId: string, agentId?: string) => {
+    const key = agentId ? `${workerId}:${agentId}` : `${workerId}:gh`;
+    setRecheckingKey(key);
+    setActionError(null);
+    setRecheckSuccess(null);
+    try {
+      const body = agentId ? { agent_id: agentId } : {};
+      await api.post(`/api/my/machines/${workerId}/auth-recheck`, body);
+      setRecheckSuccess('Đã gửi yêu cầu kiểm lại');
+      setTimeout(() => {
+        fetchFleet();
+      }, 3000);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && (err.status === 409 || err.code === 'WORKER_OFFLINE')) {
+        setActionError('Máy đang offline');
+      } else if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Lỗi khi kiểm tra lại');
+      }
+    } finally {
+      setRecheckingKey(null);
+    }
+  };
 
   const handleRevoke = async () => {
     if (!window.confirm('Thu hồi vai lead hiện tại?')) {
@@ -299,6 +333,11 @@ export default function Fleet() {
       </div>
 
       {actionError && <ErrorBanner message={actionError} />}
+      {recheckSuccess && (
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {recheckSuccess}
+        </div>
+      )}
 
       {lead.state === 'VACANT' ? (
         <div
@@ -406,15 +445,39 @@ export default function Fleet() {
                     </div>
                   </div>
 
+                  {worker.gh_auth === 'NEEDS_AUTH' && (
+                    <div
+                      role="status"
+                      className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">GitHub CLI chưa đăng nhập:</span>
+                        <span>chạy <code className="font-mono bg-red-100 px-1 py-0.5 rounded text-red-900">gh auth login</code></span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={recheckingKey === `${worker.id}:gh`}
+                        onClick={() => handleRecheck(worker.id)}
+                        className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {recheckingKey === `${worker.id}:gh` ? 'Đang kiểm…' : 'Đã đăng nhập, kiểm lại'}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                     {worker.agents.map((agent) => {
                       const isLead = lead.state === 'HELD' && lead.agent_id === agent.id;
-                      const canAssign =
-                        worker.conn_status === 'ONLINE' &&
-                        agent.kind === 'CLAUDE' &&
-                        agent.status === 'IDLE' &&
-                        !isLead;
                       const isEligible = agent.lead_eligible !== false;
+                      const canAssign =
+                        !isLead &&
+                        worker.conn_status === 'ONLINE' &&
+                        worker.gh_auth !== 'NEEDS_AUTH' &&
+                        agent.status === 'IDLE' &&
+                        isEligible &&
+                        agent.auth_status !== 'NEEDS_AUTH' &&
+                        (agent.kind === 'CLAUDE' || agent.auth_status !== undefined);
+                      const showLeadEligibleToggle = agent.kind === 'CLAUDE' || agent.auth_status !== undefined;
                       const currentProjId = agent.projects?.[0] ?? '';
 
                       return (
@@ -471,10 +534,31 @@ export default function Fleet() {
                                 Nghỉ đến: {agent.cooldown_until}
                               </div>
                             )}
+
+                            <div className="mt-2">
+                              <AuthBadge
+                                kind={agent.kind}
+                                auth_status={agent.auth_status}
+                                auth_detail={agent.auth_detail}
+                              />
+                            </div>
+
+                            {agent.auth_status === 'NEEDS_AUTH' && (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  disabled={recheckingKey === `${worker.id}:${agent.id}`}
+                                  onClick={() => handleRecheck(worker.id, agent.id)}
+                                  className="rounded border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 shadow-xs hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  {recheckingKey === `${worker.id}:${agent.id}` ? 'Đang kiểm…' : 'Đã đăng nhập, kiểm lại'}
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <div className="space-y-2 border-t border-slate-200/60 pt-2 text-xs">
-                            {agent.kind === 'CLAUDE' && (
+                            {showLeadEligibleToggle && (
                               <label className="flex items-center gap-2 cursor-pointer text-slate-700">
                                 <input
                                   type="checkbox"
@@ -499,7 +583,7 @@ export default function Fleet() {
                                 className="flex-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none"
                               >
                                 <option value="">Mọi dự án</option>
-                                {projects.map((p) => (
+                                {(projects || []).map((p) => (
                                   <option key={p.id} value={p.id}>
                                     {p.name}
                                   </option>
