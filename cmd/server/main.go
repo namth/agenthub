@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
 	"github.com/namth/agenthub/internal/office"
+	"github.com/namth/agenthub/internal/pipeline"
 	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
 	"github.com/namth/agenthub/internal/tasks"
@@ -190,24 +192,36 @@ func main() {
 		log.Println("TELEGRAM_BOT_TOKEN/TELEGRAM_ADMIN_CHAT_ID trống: tắt thông báo Telegram")
 	}
 
+	owner, repo := os.Getenv("GITHUB_REPO_OWNER"), os.Getenv("GITHUB_REPO_NAME")
+	projectID, err := ensureProject(db, owner, repo)
+	if err != nil {
+		log.Fatalf("project: %v", err)
+	}
+	gh := tasks.NewGitHubClient("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
+
 	var hub *gateway.Hub
+	var pl *pipeline.Pipeline
 	disp := dispatcher.New(db, realClock{}, configFromEnv(), notifierFunc(func(e dispatcher.Event) {
 		if hub != nil {
 			hub.Notify(e)
+		}
+		if pl != nil {
+			pl.Notify(e)
 		}
 		bus.Notify(e)
 		if tg != nil {
 			tg.Notify(e)
 		}
 	}))
-	hub = gateway.New(disp, gateway.DBAuthenticator(db))
+	pl = pipeline.New(db, disp, gh, projectID)
+	hub = gateway.New(disp, gateway.DBAuthenticator(db),
+		gateway.WithPrompt(pl.PromptFor),
+		gateway.WithSubmitHook(func(workerID, assignmentID, prURL string, result json.RawMessage) {
+			if err := pl.OnSubmitted(context.Background(), workerID, assignmentID, prURL, result); err != nil {
+				log.Printf("pipeline: %s: %v", assignmentID, err)
+			}
+		}))
 	defer hub.Close()
-
-	owner, repo := os.Getenv("GITHUB_REPO_OWNER"), os.Getenv("GITHUB_REPO_NAME")
-	projectID, err := ensureProject(db, owner, repo)
-	if err != nil {
-		log.Fatalf("project: %v", err)
-	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if len(jwtSecret) < 32 {
@@ -231,7 +245,6 @@ func main() {
 		u, ok := auth.UserFrom(r.Context())
 		return u.ID, u.Role, ok
 	}
-	gh := tasks.NewGitHubClient("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
 	fleetAPI := api.FleetHandler(db, disp, roleOf)
 	tasksSvc := tasks.NewService(db, gh, disp, projectID, tasks.WithOnCreated(func(c tasks.Created) {
 		bus.Emit(office.Event{Who: "admin", Type: "work", Task: c.TaskID, Text: "Yêu cầu mới: " + c.Title})
