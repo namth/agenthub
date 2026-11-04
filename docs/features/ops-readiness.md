@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS smoke_runs (
 **Runner dựng lệnh CLI** (không bao giờ dùng chế độ bỏ qua quyền):
 ```
 claude -p "<prompt>" --permission-mode acceptEdits --allowedTools "Bash(git:*)" "Bash(gh pr create:*)" "Bash(go test:*)" … "Read" "Edit" "Write" "Glob" "Grep"
-agy  : viết allow-rule tạm cho worktree (settings của agy trong thư mục tạm của assignment) gồm command(<tiền tố>) tương ứng, xoá sau job
+agy -p "<prompt>" --settings '{"permissions":{"allow":["command(git)","command(go)",…]}}'   # cờ phiên, không ghi settings.json
 ```
 
 ## 7. Quy tắc nghiệp vụ
@@ -109,7 +109,7 @@ agy  : viết allow-rule tạm cho worktree (settings của agy trong thư mục
 | Mã | Loại | Kịch bản | Kỳ vọng |
 | :--- | :--- | :--- | :--- |
 | **TC-83** | Runner | Job CODE với allowlist `[go test, gofmt]` | `exec` nhận `claude -p … --permission-mode acceptEdits --allowedTools` đúng thứ tự, có `Bash(go test:*)`, **không** có `--dangerously-skip-permissions` hay `bypassPermissions` |
-| **TC-84** | Runner | agy job | tạo file allow-rule tạm chứa đúng tiền tố, xoá sau job (cả khi lỗi) |
+| **TC-84** | Runner | agy job | argv có `--settings <JSON>` với `permissions.allow` = `command(<từ đầu>)` bỏ trùng, không có `*` |
 | **TC-85** | Runner | Probe thật: CLI giả trả "Failed to authenticate. OAuth session expired" | `AGENT_AUTH NEEDS_AUTH`; probe OK → `OK`; chạy lại sau 6 giờ (đồng hồ giả) |
 | **TC-86** | Dispatcher | Máy partner (thành viên p1, không p2), job p2 QUEUED | Không nhận job p2; nhận job p1 |
 | **TC-87** | Dispatcher | Partner bị gỡ khỏi p1 khi máy đang chạy job p1 | Assignment `RECLAIMED`, attempt giữ nguyên, job về hàng đợi |

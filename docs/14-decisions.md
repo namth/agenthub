@@ -209,7 +209,7 @@
 
 ## DEC-34: Quyền CLI không tương tác = allowlist theo dự án
 - **Ngày:** 2026-11-04 · **Tính năng:** FEAT-09 · **Trạng thái:** CHỐT
-- **Quyết định:** Mặc định hệ thống (`git`, `gh pr create/view`, đọc file) ∪ lệnh build/test riêng dự án do owner khai trên SCR-09; gửi trong `ASSIGN_TASK.payload.allowed_commands`. Claude: `--permission-mode acceptEdits --allowedTools …`; agy: allow-rule tạm theo assignment. Không bao giờ dùng chế độ bỏ qua quyền.
+- **Quyết định:** Mặc định hệ thống (`git`, `gh pr create/view`, đọc file) ∪ lệnh build/test riêng dự án do owner khai trên SCR-09; gửi trong `ASSIGN_TASK.payload.allowed_commands`. Claude: `--permission-mode acceptEdits --allowedTools …`; agy: cờ phiên `--settings '{"permissions":{"allow":["command(…)"]}}'`. Không bao giờ dùng chế độ bỏ qua quyền.
 - **Phương án loại:** allowlist chung cố định; chạy trong container.
 
 ## DEC-35: Kiểm đăng nhập bằng lời gọi thật
