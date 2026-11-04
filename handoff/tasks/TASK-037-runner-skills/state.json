@@ -1,0 +1,18 @@
+{
+  "id": "TASK-037",
+  "title": "Skill agenthub-spec nhúng runner, job không nhánh chạy trên snapshot repo",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T22:02:12",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-037-runner-skills/verify.sh",
+    "internal/runner/skills_test.go",
+    "internal/skills/agenthub-spec/SKILL.md"
+  ]
+}
