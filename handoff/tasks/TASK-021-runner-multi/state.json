@@ -1,7 +1,7 @@
 {
   "id": "TASK-021",
   "title": "Runner đa repo, phiên bản + tự cập nhật, lệnh --status",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "852101cf-cf87-4c0b-9789-d0d5ea59c530",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T12:11:04",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T12:12:57",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
