@@ -69,7 +69,7 @@ sequenceDiagram
 - Các vòng đã xong hiển thị dạng lịch sử Hỏi → Đáp (ai trả lời, lúc nào, qua kênh nào).
 - Validate: mọi câu hỏi phải có lựa chọn hoặc ghi chú ≥ 2 ký tự; ghi chú ≤ 1000 ký tự.
 
-**SCR-02 Kanban:** task `WAITING_USER` nằm cột **Planning** với nhãn cam "Cần làm rõ (n câu)" (sửa DEC-11).
+**SCR-02 Kanban:** task `WAITING_USER` nằm cột **Planning** với nhãn cam "Cần làm rõ (n câu)" (sửa DEC-11); thẻ trong `GET /api/tasks` có thêm `clarify_pending` = số câu hỏi của vòng đang chờ.
 
 | Trạng thái | Hiển thị |
 | :--- | :--- |
@@ -116,7 +116,7 @@ Ràng buộc: 1–8 câu hỏi; `id` dạng `^[a-z0-9_]{2,40}$`, không trùng; 
 
 | Endpoint | Quyền | Body / kết quả | Lỗi |
 | :--- | :--- | :--- | :--- |
-| `GET /api/tasks/{id}/clarifications` | thành viên dự án | `[{round, status, questions, answers, answered_by, answered_via, answered_at}]` | `403` · `404` |
+| `GET /api/tasks/{id}/clarifications` | thành viên dự án | `{ "rounds": [{round, status, questions, answers, answered_by (login), answered_via, answered_at}], "can_answer": bool, "can_auto": bool }` | `403` · `404` |
 | `POST /api/tasks/{id}/clarify` | owner, ADMIN dự án, người tạo task | `{ "answers": {"payment_gateway": "VNPay", "_notes": "…"} }` → `200 {status:"PLANNING"}` | `400 VALIDATION_ERROR` · `403` · `409 INVALID_TRANSITION` (không ở `WAITING_USER` / vòng đã trả lời) |
 | `POST /api/tasks/{id}/clarify/auto` | owner, ADMIN dự án | `{}` → round `AUTO_DECIDED` (mỗi câu chọn `recommended`), task → `PLANNING` | `403` · `409` |
 | Webhook `issue_comment` (`POST /api/webhooks/github`) | chữ ký HMAC | comment dạng `/answer <id>: <giá trị>` (nhiều dòng được); tác giả phải có quyền trả lời | bỏ qua im lặng nếu không hợp lệ, trả lời comment hướng dẫn nếu sai cú pháp |
