@@ -1,0 +1,3 @@
+110f0e20b36e62dc46482e4fe4cc3a0c118fb75fea479a2e4cbc6cc5bce60d09  handoff/tasks/TASK-028-fleet-owner/verify.sh
+9c1bb0ea01afafb648e24fb35e0ed04969b4e8d796e3d9fc3005afd3c0806309  internal/api/fleet_owner_test.go
+77769b8a924803817886fd20896aaa8879187b5ebfa385762ac821afa5cc16b6  internal/projects/projects_ui_test.go

@@ -55,6 +55,7 @@ type projectListItem struct {
 	Weight        int    `json:"weight"`
 	MaxParallel   *int   `json:"max_parallel"`
 	WebhookOK     bool   `json:"webhook_ok"`
+	OpenTasks     int    `json:"open_tasks"`
 }
 
 type adminRepoItem struct {
@@ -116,6 +117,11 @@ func Handler(s *Service, authz func(*http.Request) (userID, login string, ok boo
 		r.With(adminAuth).Patch(p, s.handlePatchProject)
 	}
 
+	// POST /api/admin/projects/{id}/webhook & /admin/projects/{id}/webhook
+	for _, p := range []string{"/api/admin/projects/{id}/webhook", "/admin/projects/{id}/webhook"} {
+		r.With(adminAuth).Post(p, s.handleRecreateWebhook)
+	}
+
 	return r
 }
 
@@ -125,13 +131,15 @@ func (s *Service) handleListProjects(w http.ResponseWriter, r *http.Request, use
 
 	if s.IsOwner(login) {
 		rows, err = s.db.QueryContext(r.Context(), `
-			SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id
+			SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id,
+				(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = projects.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
 			FROM projects
 			ORDER BY created_at ASC
 		`)
 	} else {
 		rows, err = s.db.QueryContext(r.Context(), `
-			SELECT p.id, p.name, p.github_repo, p.default_branch, p.status, pm.role, p.weight, p.max_parallel, p.webhook_id
+			SELECT p.id, p.name, p.github_repo, p.default_branch, p.status, pm.role, p.weight, p.max_parallel, p.webhook_id,
+				(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = p.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
 			FROM projects p
 			JOIN project_members pm ON p.id = pm.project_id
 			WHERE pm.user_id = ?
@@ -150,7 +158,7 @@ func (s *Service) handleListProjects(w http.ResponseWriter, r *http.Request, use
 		var it projectListItem
 		var mp sql.NullInt64
 		var wid sql.NullInt64
-		if err := rows.Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &it.OpenTasks); err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "scan error")
 			return
 		}
@@ -315,4 +323,57 @@ func (s *Service) handlePatchProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccess(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Service) handleRecreateWebhook(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "project id required")
+		return
+	}
+
+	var githubRepo string
+	err := s.db.QueryRowContext(r.Context(), "SELECT github_repo FROM projects WHERE id = ?", id).Scan(&githubRepo)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "project not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
+		return
+	}
+
+	webhookURL := strings.TrimRight(s.cfg.BaseURL, "/") + "/api/webhooks/github"
+	hookID, hookErr := s.gh.CreateWebhook(r.Context(), githubRepo, webhookURL, s.cfg.WebhookSecret)
+	if hookErr != nil {
+		writeError(w, http.StatusBadGateway, "GITHUB_ERROR", hookErr.Error())
+		return
+	}
+
+	if _, err := s.db.ExecContext(r.Context(), "UPDATE projects SET webhook_id = ? WHERE id = ?", hookID, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
+		return
+	}
+
+	var it projectListItem
+	var mp sql.NullInt64
+	var wid sql.NullInt64
+	err = s.db.QueryRowContext(r.Context(), `
+		SELECT id, name, github_repo, default_branch, status, 'ADMIN' as role, weight, max_parallel, webhook_id,
+			(SELECT COUNT(*) FROM tasks WHERE tasks.project_id = projects.id AND tasks.parent_id IS NULL AND tasks.status NOT IN ('DONE', 'REJECTED')) as open_tasks
+		FROM projects
+		WHERE id = ?
+	`, id).Scan(&it.ID, &it.Name, &it.GitHubRepo, &it.DefaultBranch, &it.Status, &it.Role, &it.Weight, &mp, &wid, &it.OpenTasks)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "database error")
+		return
+	}
+
+	if mp.Valid {
+		v := int(mp.Int64)
+		it.MaxParallel = &v
+	}
+	it.WebhookOK = wid.Valid && wid.Int64 > 0
+
+	writeSuccess(w, http.StatusOK, it)
 }
