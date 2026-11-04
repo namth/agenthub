@@ -1,0 +1,3 @@
+a9050286c1df59023656dba057ca58800a62d18957c2993ade80d349fd94e4e3  handoff/tasks/TASK-025-contributions/verify.sh
+74e152a14f4c1fc89514b838061986b1c30226dac577cf41da71c80d5f755b72  internal/contrib/contrib_test.go
+e7acb37042e9d42107c939d335ead40975bf208a7df02c4ba924b39236843f17  web/src/pages/contributions.test.tsx
