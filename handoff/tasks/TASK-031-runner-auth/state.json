@@ -1,0 +1,17 @@
+{
+  "id": "TASK-031",
+  "title": "Runner: kiểm đăng nhập CLI, auth_patterns, AUTH_RECHECK",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T16:24:20",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-031-runner-auth/verify.sh",
+    "internal/runner/auth_test.go"
+  ]
+}

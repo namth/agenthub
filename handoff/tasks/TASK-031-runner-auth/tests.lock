@@ -1,0 +1,2 @@
+283ab5c6f541f3b85424e201f494c8e054a743bb0ee0d162ae7d23a245bafe8e  handoff/tasks/TASK-031-runner-auth/verify.sh
+12cc743f5a9d4594263a95645b6b85e100d6c4e71636b2d9c347a7b99e612abd  internal/runner/auth_test.go
