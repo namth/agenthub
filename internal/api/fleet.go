@@ -180,7 +180,7 @@ func FleetHandler(db *sql.DB, d dispatcher.API, authz Authz) http.Handler {
 	})
 
 	r.Patch("/api/admin/agents/{id}", func(w http.ResponseWriter, req *http.Request) {
-		handlePatchAgent(w, req, db)
+		handlePatchAgent(w, req, db, d)
 	})
 
 	return r
@@ -281,7 +281,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 		agentRows.Close()
 
 		for _, agID := range agentIDs {
-			ag, err := getAgentDetail(db, agID)
+			ag, err := getAgentDetail(db, agID, nowOf(d))
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi lấy thông tin agent")
 				return
@@ -298,7 +298,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 	})
 }
 
-func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
+func getAgentDetail(db *sql.DB, agentID string, now time.Time) (*AgentItem, error) {
 	var ag AgentItem
 	var cdVal any
 	var lp sql.NullInt64
@@ -360,8 +360,8 @@ func getAgentDetail(db *sql.DB, agentID string) (*AgentItem, error) {
 		ag.Projects = nil
 	}
 
-	// Tính jobs_in_window theo thời gian thật hiện tại
-	windowStart := time.Now().UTC().Add(-time.Duration(ag.SoftWindowHours) * time.Hour)
+	// Tính jobs_in_window theo đồng hồ của dispatcher (cùng nguồn với assignments.started_at)
+	windowStart := now.UTC().Add(-time.Duration(ag.SoftWindowHours) * time.Hour)
 	windowStartStr := windowStart.Format(dbTimeFormat)
 	err = db.QueryRow(
 		"SELECT COUNT(*) FROM assignments WHERE agent_id = ? AND started_at >= ?",
@@ -465,7 +465,7 @@ func handlePostLeadRevoke(w http.ResponseWriter, req *http.Request, d dispatcher
 	writeJSON(w, http.StatusOK, res)
 }
 
-func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
+func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB, d dispatcher.API) {
 	rawID := chi.URLParam(req, "id")
 	agentID, err := url.PathUnescape(rawID)
 	if err != nil || agentID == "" {
@@ -693,11 +693,19 @@ func handlePatchAgent(w http.ResponseWriter, req *http.Request, db *sql.DB) {
 		return
 	}
 
-	updatedAgent, err := getAgentDetail(db, agentID)
+	updatedAgent, err := getAgentDetail(db, agentID, nowOf(d))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi lấy thông tin agent sau khi sửa")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, updatedAgent)
+}
+
+// nowOf lấy giờ từ dispatcher nếu có (dispatcher.Service dùng Clock, test dùng đồng hồ giả), ngược lại giờ hệ thống.
+func nowOf(d dispatcher.API) time.Time {
+	if c, ok := d.(interface{ Now() time.Time }); ok {
+		return c.Now()
+	}
+	return time.Now()
 }

@@ -102,6 +102,9 @@ func New(db *sql.DB, clk Clock, cfg Config, n Notifier) *Service {
 	return s
 }
 
+// Now trả giờ theo Clock của dispatcher (để API tính cửa sổ thời gian nhất quán với dữ liệu).
+func (s *Service) Now() time.Time { return s.clk.Now() }
+
 func (s *Service) formatTime(t time.Time) string {
 	return t.UTC().Format(timeFormat)
 }
