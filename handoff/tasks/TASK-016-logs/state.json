@@ -1,7 +1,7 @@
 {
   "id": "TASK-016",
   "title": "Lưu log job vào task_logs, SSE log theo máy cho Live terminal",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "6892f0e8-1223-420a-96fe-5e5b61fcc7ea",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T09:35:33",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:36:43",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
