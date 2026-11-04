@@ -31,6 +31,7 @@ import (
 	"github.com/namth/agenthub/internal/projects"
 	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
+	"github.com/namth/agenthub/internal/smoke"
 	"github.com/namth/agenthub/internal/tasks"
 	"github.com/namth/agenthub/internal/telegram"
 	"github.com/namth/agenthub/internal/tokens"
@@ -404,6 +405,15 @@ func main() {
 	tokensStore := tokens.NewStore(db, time.Now)
 	tokensAPI := tokens.Handler(tokensStore, userOf)
 	mcpAPI := mcp.Handler(tokensStore, isOwnerID, newMCPBackend(db, tasksSvc, disp), time.Now)
+	smokeOps := &smokeTaskOps{
+		db:      db,
+		tasks:   tasksSvc,
+		clients: clients,
+		gh:      gh,
+		multi:   multi,
+	}
+	smokeSvc := smoke.New(db, smokeOps, time.Now)
+	smokeAPI := smoke.Handler(smokeSvc, userOf)
 
 	mounts := []server.Mount{
 		{Pattern: "/mcp", Handler: mcpAPI},
@@ -420,6 +430,9 @@ func main() {
 		{Pattern: "/download/*", Handler: machinesAPI},
 		{Pattern: "/api/admin/lead/*", Handler: fleetAPI},
 		{Pattern: "/api/admin/agents/*", Handler: fleetAPI},
+		{Pattern: "/api/admin/projects/{id}/smoke-run", Handler: smokeAPI},
+		{Pattern: "/api/admin/projects/{id}/smoke-runs", Handler: smokeAPI},
+		{Pattern: "/api/admin/projects/{id}/smoke-runs/*", Handler: smokeAPI},
 		{Pattern: "/api/projects", Handler: projectsAPI},
 		{Pattern: "/api/admin/projects", Handler: projectsAPI},
 		{Pattern: "/api/admin/projects/*", Handler: projectsAPI},
@@ -540,6 +553,20 @@ func main() {
 			}
 		}
 	}()
+	go func() {
+		t := time.NewTicker(10 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := smokeSvc.Track(ctx); err != nil {
+					log.Printf("smoke track: %v", err)
+				}
+			}
+		}
+	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -598,4 +625,82 @@ func formatClarifyComment(round int, qs []pipeline.ClarifyQuestion) string {
 	}
 	sb.WriteString("/answer _notes: ghi chú thêm nếu có\n```\n")
 	return sb.String()
+}
+
+type smokeTaskOps struct {
+	db      *sql.DB
+	tasks   *tasks.Service
+	clients *repoClients
+	gh      tasks.GitHub
+	multi   bool
+}
+
+func (o *smokeTaskOps) CreateIn(ctx context.Context, userID, projectID, title, description string) (string, error) {
+	t, err := o.tasks.CreateIn(ctx, userID, projectID, title, description)
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
+}
+
+func (o *smokeTaskOps) Approve(ctx context.Context, taskID string) error {
+	return o.tasks.Approve(ctx, taskID)
+}
+
+func (o *smokeTaskOps) Cleanup(ctx context.Context, taskID string) error {
+	var projectID string
+	var issueID sql.NullInt64
+	var prURL sql.NullString
+	err := o.db.QueryRowContext(ctx, `SELECT project_id, github_issue_id, pr_url FROM tasks WHERE id = ?`, taskID).Scan(&projectID, &issueID, &prURL)
+	if err != nil {
+		return err
+	}
+
+	var ghClient tasks.GitHub
+	if o.multi && o.clients != nil {
+		ghClient = o.clients.GitHubOrNil(projectID)
+	} else {
+		ghClient = o.gh
+	}
+
+	if ghClient == nil {
+		return nil
+	}
+
+	if issueID.Valid && issueID.Int64 > 0 {
+		_ = ghClient.CloseIssue(ctx, int(issueID.Int64), "Smoke test kết thúc — đóng issue mẫu")
+	}
+
+	closePR := func(rawURL string) {
+		trimmed := strings.TrimRight(rawURL, "/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) > 0 {
+			if num, err := strconv.Atoi(parts[len(parts)-1]); err == nil && num > 0 {
+				_ = ghClient.CloseIssue(ctx, num, "Smoke test kết thúc — đóng PR mẫu")
+			}
+		}
+	}
+
+	if prURL.Valid && prURL.String != "" {
+		closePR(prURL.String)
+	}
+
+	subRows, err := o.db.QueryContext(ctx, `SELECT github_issue_id, pr_url FROM tasks WHERE parent_id = ?`, taskID)
+	if err == nil {
+		defer subRows.Close()
+		for subRows.Next() {
+			var subIssue sql.NullInt64
+			var subPR sql.NullString
+			if err := subRows.Scan(&subIssue, &subPR); err == nil {
+				if subIssue.Valid && subIssue.Int64 > 0 {
+					_ = ghClient.CloseIssue(ctx, int(subIssue.Int64), "Smoke test kết thúc — đóng sub-task issue mẫu")
+				}
+				if subPR.Valid && subPR.String != "" {
+					closePR(subPR.String)
+				}
+			}
+		}
+	}
+
+	return nil
 }
