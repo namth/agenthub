@@ -1,0 +1,21 @@
+{
+  "id": "TASK-016",
+  "title": "Lưu log job vào task_logs, SSE log theo máy cho Live terminal",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:28:11",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-016-logs/verify.sh",
+    "internal/logs/logs_test.go",
+    "internal/gateway/logsink_test.go",
+    "internal/gateway/hooks_test.go",
+    "internal/gateway/gateway_test.go",
+    "internal/gateway/register_test.go"
+  ]
+}
