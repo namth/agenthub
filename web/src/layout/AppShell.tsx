@@ -83,6 +83,13 @@ export default function AppShell({ user, officeEnabled }: { user: User; officeEn
               ))}
             </nav>
             <div className="mt-8 border-t border-slate-200 px-2 pt-3 text-xs text-slate-500">
+              <NavLink
+                to="/profile"
+                onClick={() => setIsMenuOpen(false)}
+                className="block mb-1 text-sm font-medium text-slate-700 hover:text-slate-900"
+              >
+                Hồ sơ
+              </NavLink>
               {user.username} · {user.role === 'ADMIN' ? 'Quản trị' : 'Đối tác'}
             </div>
           </div>
@@ -113,6 +120,12 @@ export default function AppShell({ user, officeEnabled }: { user: User; officeEn
           ))}
         </nav>
         <div className="mt-8 border-t border-slate-200 px-2 pt-3 text-xs text-slate-500">
+          <NavLink
+            to="/profile"
+            className="block mb-1 text-sm font-medium text-slate-700 hover:text-slate-900"
+          >
+            Hồ sơ
+          </NavLink>
           {user.username} · {user.role === 'ADMIN' ? 'Quản trị' : 'Đối tác'}
         </div>
       </aside>

@@ -16,6 +16,7 @@ import Office from './pages/Office';
 import Projects from './pages/Projects';
 import Contributions from './pages/Contributions';
 import MyMachines from './pages/MyMachines';
+import Profile from './pages/Profile';
 
 const PAGES: Record<string, React.ComponentType> = {
   'SCR-03': TaskCreate,
@@ -64,6 +65,9 @@ export default function App() {
           }
           if (n.code === 'SCR-07') {
             return <Route key={n.code} path={n.path} element={<Settings onOfficeChange={setOfficeEnabled} />} />;
+          }
+          if (n.code === 'SCR-12') {
+            return <Route key={n.code} path={n.path} element={<Profile user={auth.user} />} />;
           }
           const Page = PAGES[n.code];
           return <Route key={n.code} path={n.path} element={<Page />} />;

@@ -1,13 +1,33 @@
 {
   "id": "TASK-046",
   "title": "Token cá nhân, MCP /mcp và SCR-12 Hồ sơ",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "8528483b-8456-4fbc-9ef5-14f0b6a5bc3d",
   "history": [
     {
       "at": "2026-11-04T21:53:22",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T21:56:12",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T21:56:24",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T22:15:50",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:17:37",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
@@ -15,5 +35,6 @@
     "internal/tokens/tokens_test.go",
     "internal/mcp/mcp_test.go",
     "web/src/pages/profile.test.tsx"
-  ]
+  ],
+  "via": "agy"
 }

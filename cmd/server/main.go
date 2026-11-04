@@ -24,6 +24,7 @@ import (
 	"github.com/namth/agenthub/internal/gateway"
 	"github.com/namth/agenthub/internal/logs"
 	"github.com/namth/agenthub/internal/machines"
+	"github.com/namth/agenthub/internal/mcp"
 	"github.com/namth/agenthub/internal/office"
 	"github.com/namth/agenthub/internal/pipeline"
 	"github.com/namth/agenthub/internal/projects"
@@ -31,6 +32,7 @@ import (
 	"github.com/namth/agenthub/internal/server"
 	"github.com/namth/agenthub/internal/tasks"
 	"github.com/namth/agenthub/internal/telegram"
+	"github.com/namth/agenthub/internal/tokens"
 	"github.com/namth/agenthub/web"
 )
 
@@ -333,8 +335,14 @@ func main() {
 		u, ok := auth.UserFrom(r.Context())
 		return u.ID, ok && isOwnerID(u.ID), ok
 	})
+	tokensStore := tokens.NewStore(db, time.Now)
+	tokensAPI := tokens.Handler(tokensStore, userOf)
+	mcpAPI := mcp.Handler(tokensStore, isOwnerID, newMCPBackend(db, tasksSvc, disp), time.Now)
 
 	mounts := []server.Mount{
+		{Pattern: "/mcp", Handler: mcpAPI},
+		{Pattern: "/api/me/tokens", Handler: tokensAPI},
+		{Pattern: "/api/me/tokens/*", Handler: tokensAPI},
 		{Pattern: "/ws/agent", Handler: hub},
 		{Pattern: "/api/auth/*", Handler: authSvc.Routes()},
 		{Pattern: "/api/fleet", Handler: fleetAPI},
