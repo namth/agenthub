@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import AppShell from './layout/AppShell';
 import { ErrorBanner, Loading } from './components/StateView';
 import { useAuth } from './hooks/useAuth';
 import { visibleNav } from './nav';
+import { api } from './api/client';
 import Login from './pages/Login';
 import Kanban from './pages/Kanban';
 import TaskCreate from './pages/TaskCreate';
@@ -14,17 +16,22 @@ import Office from './pages/Office';
 
 const PAGES: Record<string, React.ComponentType> = {
   'SCR-03': TaskCreate,
-  'SCR-04': TaskDetail,
   'SCR-05': Fleet,
   'SCR-06': LiveTerminal,
-  'SCR-07': Settings,
   'SCR-08': Office,
 };
 
 export default function App() {
   const auth = useAuth();
-  // TODO(TASK-17): đọc office_enabled từ GET /api/admin/settings.
-  const officeEnabled = false;
+  const [officeEnabled, setOfficeEnabled] = useState(false);
+
+  useEffect(() => {
+    if (auth.status === 'ready' && auth.user.role === 'ADMIN') {
+      api.get<{ office_enabled: boolean }>('/api/admin/settings')
+        .then((data) => setOfficeEnabled(Boolean(data?.office_enabled)))
+        .catch(() => {});
+    }
+  }, [auth.status, auth.status === 'ready' ? auth.user.role : null]);
 
   if (auth.status === 'loading') return <div className="p-6"><Loading /></div>;
   if (auth.status === 'error')
@@ -43,6 +50,12 @@ export default function App() {
         {visibleNav(auth.user.role, officeEnabled).map((n) => {
           if (n.code === 'SCR-02') {
             return <Route key={n.code} path={n.path} element={<Kanban role={auth.user.role} />} />;
+          }
+          if (n.code === 'SCR-04') {
+            return <Route key={n.code} path={n.path} element={<TaskDetail role={auth.user.role} />} />;
+          }
+          if (n.code === 'SCR-07') {
+            return <Route key={n.code} path={n.path} element={<Settings onOfficeChange={setOfficeEnabled} />} />;
           }
           const Page = PAGES[n.code];
           return <Route key={n.code} path={n.path} element={<Page />} />;
