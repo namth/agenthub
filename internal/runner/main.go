@@ -34,6 +34,8 @@ func Main(args []string) int {
 		worktreeRoot   string
 		osName         string
 		keyFile        string
+		baseBranch     string
+		noPR           bool
 		agentFlags     stringSlice
 		exhaustPattern stringSlice
 	)
@@ -43,6 +45,8 @@ func Main(args []string) int {
 	fs.StringVar(&worktreeRoot, "worktrees", "", "Đường dẫn thư mục chứa worktree (mặc định <repo>/.worktrees)")
 	fs.StringVar(&osName, "os", runtime.GOOS, "Tên hệ điều hành")
 	fs.StringVar(&keyFile, "token-file", "", "Đường dẫn file chứa khoá xác thực")
+	fs.StringVar(&baseBranch, "base", "main", "Nhánh cơ sở khi mở pull request")
+	fs.BoolVar(&noPR, "no-pr", false, "Không tự động mở pull request cho job CODE")
 	fs.Var(&agentFlags, "agent", "Cấu hình agent dạng kind=command (lặp được, vd --agent claude='claude -p {prompt}')")
 	fs.Var(&exhaustPattern, "exhaust-pattern", "Mẫu regex/chuỗi nhận diện hết limit (lặp được)")
 
@@ -104,16 +108,22 @@ func Main(args []string) int {
 		})
 	}
 
+	git := NewGit(repoDir, worktreeRoot)
+	exec := ExecExecutor{}
+
+	var openPR func(ctx context.Context, dir, branch, title, body string) (string, error)
+	if !noPR {
+		openPR = GhPROpener(exec, baseBranch)
+	}
+
 	cfg := Config{
 		ServerURL:       serverURL,
 		Token:           authSecret,
 		OS:              osName,
 		Agents:          agents,
 		ExhaustPatterns: exhaustPattern,
+		OpenPR:          openPR,
 	}
-
-	git := NewGit(repoDir, worktreeRoot)
-	exec := ExecExecutor{}
 
 	r := New(cfg, exec, git, time.Now)
 

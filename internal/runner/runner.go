@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -33,6 +36,7 @@ type Config struct {
 	LogFlushBytes   int
 	ReconnectMin    time.Duration
 	ReconnectMax    time.Duration
+	OpenPR          func(ctx context.Context, dir, branch, title, body string) (prURL string, err error)
 }
 
 type agentState struct {
@@ -554,9 +558,37 @@ func (r *Runner) runTask(
 		r.mu.Unlock()
 	}()
 
-	var dir string
-	var err error
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("agenthub-%s-*", assignmentID))
+	if err != nil {
+		log.Printf("runner: không tạo được thư mục tạm: %v", err)
+		r.mu.Lock()
+		if ag, ok := r.agents[agentID]; ok && ag.status == "BUSY" {
+			ag.status = "IDLE"
+		}
+		r.mu.Unlock()
+		return
+	}
+	defer os.RemoveAll(tmpDir)
 
+	resultFile, err := filepath.Abs(filepath.Join(tmpDir, "result.json"))
+	if err != nil {
+		resultFile = filepath.Join(tmpDir, "result.json")
+	}
+
+	var instruction string
+	switch jobKind {
+	case "SPEC":
+		instruction = "Ghi kết quả JSON dạng {\"subtasks\":[{\"title\":\"...\",\"description\":\"...\",\"dod\":\"...\"}]} vào file trên."
+	case "QA_REVIEW":
+		instruction = "Ghi kết quả JSON dạng {\"verdict\":\"PASS\"|\"CHANGES\",\"comments\":\"...\"} vào file trên."
+	case "CODE":
+		instruction = "Tuỳ chọn: ghi kết quả JSON dạng {\"summary\":\"...\"} vào file trên."
+	default:
+		instruction = "Ghi kết quả JSON vào file trên."
+	}
+	prompt += fmt.Sprintf("\n\nAGENTHUB_RESULT_FILE=%s\n%s", resultFile, instruction)
+
+	var dir string
 	if branchName != "" {
 		dir, err = r.git.Prepare(ctx, branchName)
 		if err != nil {
@@ -680,12 +712,138 @@ func (r *Runner) runTask(
 		return
 	}
 
-	// 3. Exit 0: Thành công
+	// 3. Exit 0: Đọc result.json và xử lý nộp kết quả
 	if exitCode == 0 && execErr == nil {
+		resultData, readErr := os.ReadFile(resultFile)
+		_ = os.RemoveAll(tmpDir)
+
+		var resultObj map[string]any
+
+		if readErr != nil {
+			if errors.Is(readErr, os.ErrNotExist) {
+				if jobKind == "CODE" {
+					resultObj = nil
+				} else {
+					r.send(map[string]any{
+						"event":         "LOG_CHUNK",
+						"assignment_id": assignmentID,
+						"chunk":         "[runner] thiếu file kết quả result.json\n",
+					})
+					if branchName != "" && dir != "" {
+						_ = r.git.Cleanup(context.Background(), dir)
+					}
+					r.mu.Lock()
+					if ag, ok := r.agents[agentID]; ok {
+						ag.status = "IDLE"
+					}
+					r.mu.Unlock()
+					return
+				}
+			} else {
+				r.send(map[string]any{
+					"event":         "LOG_CHUNK",
+					"assignment_id": assignmentID,
+					"chunk":         fmt.Sprintf("[runner] không thể đọc result.json: %v\n", readErr),
+				})
+				if branchName != "" && dir != "" {
+					_ = r.git.Cleanup(context.Background(), dir)
+				}
+				r.mu.Lock()
+				if ag, ok := r.agents[agentID]; ok {
+					ag.status = "IDLE"
+				}
+				r.mu.Unlock()
+				return
+			}
+		} else {
+			if len(resultData) > 64*1024 {
+				r.send(map[string]any{
+					"event":         "LOG_CHUNK",
+					"assignment_id": assignmentID,
+					"chunk":         fmt.Sprintf("[runner] result.json vượt quá 64KB (%d bytes)\n", len(resultData)),
+				})
+				if branchName != "" && dir != "" {
+					_ = r.git.Cleanup(context.Background(), dir)
+				}
+				r.mu.Lock()
+				if ag, ok := r.agents[agentID]; ok {
+					ag.status = "IDLE"
+				}
+				r.mu.Unlock()
+				return
+			}
+
+			var parsed any
+			if err := json.Unmarshal(resultData, &parsed); err != nil {
+				r.send(map[string]any{
+					"event":         "LOG_CHUNK",
+					"assignment_id": assignmentID,
+					"chunk":         fmt.Sprintf("[runner] result.json không phải JSON hợp lệ: %v\n", err),
+				})
+				if branchName != "" && dir != "" {
+					_ = r.git.Cleanup(context.Background(), dir)
+				}
+				r.mu.Lock()
+				if ag, ok := r.agents[agentID]; ok {
+					ag.status = "IDLE"
+				}
+				r.mu.Unlock()
+				return
+			}
+
+			obj, isObj := parsed.(map[string]any)
+			if !isObj {
+				r.send(map[string]any{
+					"event":         "LOG_CHUNK",
+					"assignment_id": assignmentID,
+					"chunk":         "[runner] result.json không phải là một JSON object\n",
+				})
+				if branchName != "" && dir != "" {
+					_ = r.git.Cleanup(context.Background(), dir)
+				}
+				r.mu.Lock()
+				if ag, ok := r.agents[agentID]; ok {
+					ag.status = "IDLE"
+				}
+				r.mu.Unlock()
+				return
+			}
+
+			resultObj = obj
+		}
+
+		var prURL string
 		if branchName != "" && dir != "" {
 			msg := fmt.Sprintf("feat(task-%s): %s attempt %d [by Runner]", taskID, jobKind, attempt)
 			_, _ = r.git.CommitWIP(context.Background(), dir, msg)
 			_ = r.git.Push(context.Background(), dir, branchName)
+
+			if jobKind == "CODE" && r.cfg.OpenPR != nil {
+				var summary string
+				if resultObj != nil {
+					if s, ok := resultObj["summary"].(string); ok {
+						summary = strings.TrimSpace(s)
+					}
+				}
+				title := fmt.Sprintf("feat(task-%s): %s", taskID, jobKind)
+				body := title
+				if summary != "" {
+					title = fmt.Sprintf("feat(task-%s): %s", taskID, summary)
+					body = summary
+				}
+				url, prErr := r.cfg.OpenPR(ctx, dir, branchName, title, body)
+				if prErr != nil {
+					r.send(map[string]any{
+						"event":         "LOG_CHUNK",
+						"assignment_id": assignmentID,
+						"chunk":         fmt.Sprintf("[runner] lỗi mở PR: %v\n", prErr),
+					})
+					prURL = ""
+				} else {
+					prURL = url
+				}
+			}
+
 			_ = r.git.Cleanup(context.Background(), dir)
 		}
 
@@ -693,7 +851,8 @@ func (r *Runner) runTask(
 			"event":         "TASK_SUBMITTED",
 			"assignment_id": assignmentID,
 			"branch":        branchName,
-			"pr_url":        "",
+			"pr_url":        prURL,
+			"result":        resultObj,
 		})
 
 		r.mu.Lock()
