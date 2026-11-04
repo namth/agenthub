@@ -1,7 +1,7 @@
 {
   "id": "TASK-010",
   "title": "Văn phòng ảo backend: event bus, SSE, bật/tắt (TASK-15, FEAT-02)",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "a786a11e-82a5-4f4f-b048-e74873897d89",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T09:04:23",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:05:54",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
