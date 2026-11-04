@@ -59,6 +59,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "INVALID_TRANSITION", err.Error())
 	case errors.Is(err, ErrGitHub):
 		writeError(w, http.StatusBadGateway, "GITHUB_ERROR", err.Error())
+	case errors.Is(err, ErrNotConfigured):
+		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 	}
@@ -86,6 +88,7 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	getDetailH := handleGetTaskDetail(s.db, s.projectID, authz)
 	approveH := handleApprove(s, authz)
 	rejectH := handleReject(s, authz)
+	mergeH := handleMerge(s, authz)
 
 	// Hỗ trợ cả tiền tố /api/tasks và /tasks
 	r.Post("/api/tasks", createH)
@@ -95,6 +98,7 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r.Get("/api/tasks/{id}", getDetailH)
 	r.Post("/api/tasks/{id}/approve", approveH)
 	r.Post("/api/tasks/{id}/reject", rejectH)
+	r.Post("/api/tasks/{id}/merge", mergeH)
 
 	r.Post("/tasks", createH)
 	r.Post("/tasks/", createH)
@@ -103,6 +107,7 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r.Get("/tasks/{id}", getDetailH)
 	r.Post("/tasks/{id}/approve", approveH)
 	r.Post("/tasks/{id}/reject", rejectH)
+	r.Post("/tasks/{id}/merge", mergeH)
 
 	return r
 }
@@ -208,6 +213,36 @@ func handleReject(s *Service, authz Authz) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":     taskID,
 			"status": "REJECTED",
+		})
+	}
+}
+
+func handleMerge(s *Service, authz Authz) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, role, ok := authz(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
+			return
+		}
+		if role != "ADMIN" {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "chỉ admin mới có quyền merge")
+			return
+		}
+
+		taskID := chi.URLParam(r, "id")
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "thiếu task id")
+			return
+		}
+
+		if err := s.Merge(r.Context(), taskID); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":     taskID,
+			"status": "DONE",
 		})
 	}
 }
