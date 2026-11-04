@@ -1,0 +1,19 @@
+{
+  "id": "TASK-013",
+  "title": "Runner: đọc result.json, mở PR cho job CODE (DEC-12)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:13:20",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-013-runner-result/verify.sh",
+    "internal/runner/result_test.go",
+    "internal/runner/runner_test.go",
+    "internal/runner/integration_test.go"
+  ]
+}
