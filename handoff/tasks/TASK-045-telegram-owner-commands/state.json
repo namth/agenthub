@@ -1,0 +1,17 @@
+{
+  "id": "TASK-045",
+  "title": "Telegram: lệnh owner /new /tasks /status và nút Merge",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:46:53",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-045-telegram-owner-commands/verify.sh",
+    "internal/telegram/commands_test.go"
+  ]
+}

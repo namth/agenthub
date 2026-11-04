@@ -1,0 +1,2 @@
+d8502e5031ab449dee15caca1fa6c34d2b062978772ca7f8181f8a29c78187cc  handoff/tasks/TASK-045-telegram-owner-commands/verify.sh
+cb0424ad690da6af70dae4b6db12309d16279493b92c6d6d6d5e1327bf68d584  internal/telegram/commands_test.go
