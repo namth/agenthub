@@ -44,6 +44,7 @@ Tất cả các API REST trả về định dạng chuẩn:
 ### 1.4 Nhóm Cài đặt & Văn phòng ảo (FEAT-02)
 * **`GET/PATCH /api/admin/settings`**: Chỉ owner; gồm `office_enabled`, `telegram_enabled` (chỉ đọc, DEC-30).
 * **`GET /api/office/stream`**: Owner và `PARTNER` (DEC-27), SSE; snapshot có `users[]`, `auth_status`, `gh_auth`; `404` khi tắt văn phòng ảo; `429` quá 3 kết nối/người hoặc 30 tổng. `GET /api/admin/office/stream` trả `308` tới đường mới. Chi tiết: [features/virtual-office.md](features/virtual-office.md) §6.
+* **`GET /api/office/status`**: Mọi người dùng đã đăng nhập → `{ "enabled": bool }` (sidebar biết có hiện SCR-08).
 * **`POST /api/my/machines/{id}/auth-recheck`**: Chủ máy hoặc owner; body `{ "agent_id"?: "…" }` → `202`; máy offline → `409 WORKER_OFFLINE` (FEAT-06).
 
 ### 1.5 Mã lỗi chung

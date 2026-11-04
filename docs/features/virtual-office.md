@@ -114,7 +114,7 @@ Thanh dưới: Lead · Đang chạy 3 job · Chờ 2 · Nghỉ 1 · Cần đăng
 
 | Trạng thái | Hiển thị |
 | :--- | :--- |
-| **Empty** | Văn phòng đầy đủ nội thất, 8 bàn trống, khu chỉ huy chỉ có bàn của người đang xem; thông điệp "Chưa có máy nào kết nối" + nút "Thêm máy" → SCR-11 (partner) / SCR-05 (owner). |
+| **Empty** | Văn phòng đầy đủ nội thất, 8 bàn trống, khu chỉ huy chỉ có bàn của người đang xem; thông điệp "Chưa có máy nào kết nối" + link "Thêm máy" → SCR-11 `/my/machines` (owner cũng thêm máy được ở đó). |
 | **Loading** | Khung văn phòng mờ (skeleton) đến khi nhận `snapshot`. |
 | **Error** | Mất SSE: băng hổ phách "Mất kết nối — đang thử lại", giữ cảnh cuối, nhân vật đứng yên; `403` → về SCR-02; `429` → "Bạn đã mở văn phòng ở quá nhiều tab". |
 | **Success** | Văn phòng sống như trên. |
@@ -146,6 +146,7 @@ ALTER TABLE users ADD COLUMN last_seen_at DATETIME;
 | Endpoint | Quyền | Mô tả | Lỗi |
 | :--- | :--- | :--- | :--- |
 | `GET /api/office/stream` | owner, PARTNER | **Đổi đường dẫn** từ `/api/admin/office/stream` (đường cũ giữ làm bí danh, trả `308` tới đường mới). `text/event-stream`; sự kiện đầu `event: snapshot`, sau đó `event: office`; `id` tăng dần; hỗ trợ `Last-Event-ID`; heartbeat `: ping` mỗi 20 giây. | `401` · `404 NOT_FOUND` khi tắt · `429 TOO_MANY_CONNECTIONS` (BR-23) |
+| `GET /api/office/status` | owner, PARTNER | `{ "enabled": bool }` — sidebar mọi vai biết có hiện mục "Văn phòng" | `401` |
 | `GET /api/admin/settings` | owner | mọi key, gồm `office_enabled`, `telegram_enabled` (chỉ đọc) | `403` |
 | `PATCH /api/admin/settings` | owner | `{ "office_enabled": true }` | `400 VALIDATION_ERROR` · `403` |
 
@@ -207,7 +208,7 @@ data: {"ts":"2026-11-04T09:02:11Z","who":"user:partner-a","type":"presence","tex
 | ~~TASK-15~~ | M4 | Bản 1: `internal/office`, SSE, `settings` | DONE |
 | ~~TASK-16~~ | M4 | Bản 1: `Office.tsx` | DONE |
 | ~~TASK-17~~ | M4 | Công tắc SCR-07 | DONE |
-| **TASK-033** | Bản 2 | `internal/office`: snapshot thêm `users`, `auth_status`, `gh_auth`, `owner`; sự kiện `auth`, `presence`, `approve` theo người duyệt; middleware `last_seen_at` (BR-44, TC-69); route `GET /api/office/stream` cho owner + partner, bí danh `308`; giới hạn BR-23; `GET /api/admin/settings` thêm `telegram_enabled` (DEC-30) | `go test ./internal/office/... ./internal/auth/...` qua TC-28 → TC-32, TC-68 → TC-70 |
+| **TASK-033** | Bản 2 | `internal/office`: snapshot thêm `users`, `auth_status`, `gh_auth`, `owner`; sự kiện `auth`, `presence`, `approve` theo người duyệt; `office.Presence` + middleware `last_seen_at` (BR-44, TC-69), `GET /api/office/status`, hook `tasks.WithOnApproved`; route `GET /api/office/stream` cho owner + partner, bí danh `308`; giới hạn BR-23; `GET /api/admin/settings` thêm `telegram_enabled` (DEC-30) | `go test ./internal/office/... ./internal/tasks/...` qua TC-28 → TC-32, TC-68 → TC-70 |
 | **TASK-035** | Bản 2 | `web/src/office/model.ts` (`computeLayout` bản 2: khu làm việc BR-43, khu chỉ huy BR-44, đáy phòng nghỉ/sảnh), `renderer.ts` (nội thất theo bản tham khảo legacy: sàn gỗ, tường, vách/cửa kính, bảng tin, cây, đồng hồ; nhân vật người dùng; 🔑 BR-45), lớp DOM logo (BR-46), `Office.tsx` (route/stream mới, thanh dưới, 4 trạng thái); sidebar hiện "Văn phòng" cho partner khi bật | `cd web && npx vitest run src/office` qua TC-33 → TC-35, TC-71 → TC-73; `npm run typecheck && npm run build`; ảnh chụp màn hình 0/3/9 máy gửi kèm bản nộp |
 
 Thứ tự: TASK-030 (migration) → TASK-033 → TASK-035.
