@@ -180,23 +180,28 @@ func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]A
 			detailVal = nil
 		}
 
+		leadEligible := 1
+		if strings.EqualFold(h.Kind, KindAntigravity) {
+			leadEligible = 0
+		}
+
 		if h.AuthStatus == "" {
 			_, err = tx.Exec(
-				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at)
-				 VALUES (?, ?, ?, 'IDLE', ?, ?)
+				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, lead_eligible)
+				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?)
 				 ON CONFLICT(worker_id, kind) DO UPDATE SET idle_since = COALESCE(agents.idle_since, excluded.idle_since)`,
-				agentID, workerID, h.Kind, nowStr, nowStr,
+				agentID, workerID, h.Kind, nowStr, nowStr, leadEligible,
 			)
 		} else {
 			_, err = tx.Exec(
-				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, auth_status, auth_detail, auth_checked_at)
-				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?, ?, ?)
+				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, auth_status, auth_detail, auth_checked_at, lead_eligible)
+				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(worker_id, kind) DO UPDATE SET
 					idle_since = COALESCE(agents.idle_since, excluded.idle_since),
 					auth_status = excluded.auth_status,
 					auth_detail = excluded.auth_detail,
 					auth_checked_at = excluded.auth_checked_at`,
-				agentID, workerID, h.Kind, nowStr, nowStr, h.AuthStatus, detailVal, nowStr,
+				agentID, workerID, h.Kind, nowStr, nowStr, h.AuthStatus, detailVal, nowStr, leadEligible,
 			)
 		}
 		if err != nil {
@@ -1015,14 +1020,26 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 	var branch sql.NullString
 	found := false
 
-	// 1) Agent là lead -> job lead_only trước (mọi dự án, không xét agent_projects)
+	// 1) Agent là lead -> job lead_only trước (mọi dự án, bất kể required_agent, DEC-29)
 	if isLead {
 		err = tx.QueryRow(`
-			SELECT id, task_id, kind, attempt, branch_name
-			FROM jobs
-			WHERE status = 'QUEUED' AND required_agent = ? AND lead_only = 1
-			ORDER BY priority ASC, created_at ASC, id ASC
-			LIMIT 1`, kind).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			SELECT j.id, j.task_id, j.kind, j.attempt, j.branch_name
+			FROM jobs j
+			WHERE j.status = 'QUEUED' AND j.lead_only = 1
+			  AND NOT (
+			      j.kind = 'QA_REVIEW'
+			      AND EXISTS (
+			          SELECT 1
+			          FROM assignments a_code
+			          JOIN jobs j_code ON a_code.job_id = j_code.id
+			          WHERE j_code.task_id = j.task_id
+			            AND j_code.kind = 'CODE'
+			            AND a_code.agent_id = ?
+			            AND a_code.status = 'SUBMITTED'
+			      )
+			  )
+			ORDER BY j.priority ASC, j.created_at ASC, j.id ASC
+			LIMIT 1`, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if err == nil {
 			found = true
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -1048,12 +1065,24 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 			      NOT EXISTS (SELECT 1 FROM agent_projects ap WHERE ap.agent_id = ?)
 			      OR j.project_id IN (SELECT ap2.project_id FROM agent_projects ap2 WHERE ap2.agent_id = ?)
 			  )
+			  AND NOT (
+			      j.kind = 'QA_REVIEW'
+			      AND EXISTS (
+			          SELECT 1
+			          FROM assignments a_code
+			          JOIN jobs j_code ON a_code.job_id = j_code.id
+			          WHERE j_code.task_id = j.task_id
+			            AND j_code.kind = 'CODE'
+			            AND a_code.agent_id = ?
+			            AND a_code.status = 'SUBMITTED'
+			      )
+			  )
 			ORDER BY
 			  j.priority ASC,
 			  (CAST((SELECT COUNT(*) FROM jobs r WHERE r.project_id = j.project_id AND r.status = 'RUNNING') AS REAL) / p.weight) ASC,
 			  j.created_at ASC,
 			  j.id ASC
-			LIMIT 1`, kind, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
+			LIMIT 1`, kind, agentID, agentID, agentID).Scan(&jobID, &taskID, &jobKind, &prevAttempt, &branch)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -1634,8 +1663,8 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 		return Lease{}, err
 	}
 
-	// 3. Đủ điều kiện (BR-06, BR-32, BR-33, BR-37)
-	if kind != KindClaude || status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 || authStatus == AuthNeeds || ghAuth == AuthNeeds {
+	// 3. Đủ điều kiện (BR-06, BR-32, BR-33, BR-37, DEC-29: bỏ điều kiện kind = CLAUDE)
+	if status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 || authStatus == AuthNeeds || ghAuth == AuthNeeds {
 		return Lease{}, ErrAgentNotEligible
 	}
 
@@ -1794,7 +1823,7 @@ func (s *Service) revokeLeadLocked(reason string, banAgent bool) ([]Event, error
 		s.isVacant = true
 		var cdVal any
 		_ = s.db.QueryRow(
-			"SELECT MIN(cooldown_until) FROM agents WHERE kind = 'CLAUDE' AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+			"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
 		).Scan(&cdVal)
 		until := parseDBTime(cdVal)
 		events = append(events, Event{
@@ -1837,7 +1866,7 @@ func (s *Service) tryAssignLeaseLocked(excludeAgent string) ([]Event, error) {
 		`SELECT a.id, a.lead_priority, a.soft_max_jobs, a.soft_window_hours, a.idle_since
 		 FROM agents a
 		 JOIN workers w ON a.worker_id = w.id
-		 WHERE a.kind = 'CLAUDE' AND a.status = 'IDLE' AND w.conn_status = 'ONLINE'
+		 WHERE a.status = 'IDLE' AND w.conn_status = 'ONLINE'
 		   AND w.paused = 0 AND a.lead_eligible = 1
 		   AND a.auth_status <> 'NEEDS_AUTH' AND w.gh_auth <> 'NEEDS_AUTH'`,
 	)
