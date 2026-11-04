@@ -4,10 +4,9 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/namth/agenthub/internal/dispatcher"
@@ -50,6 +49,21 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 	})
 }
 
+func writeServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrValidation):
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+	case errors.Is(err, ErrNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+	case errors.Is(err, ErrInvalidTransition):
+		writeError(w, http.StatusConflict, "INVALID_TRANSITION", err.Error())
+	case errors.Is(err, ErrGitHub):
+		writeError(w, http.StatusBadGateway, "GITHUB_ERROR", err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+	}
+}
+
 func newUUID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
@@ -60,13 +74,18 @@ func newUUID() string {
 
 // Handler trả về http.Handler phục vụ các API liên quan đến Task và Kanban.
 func Handler(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, authz Authz) http.Handler {
+	return HandlerWithService(NewService(db, gh, d, projectID), authz)
+}
+
+// HandlerWithService nhận Service và Authz để khởi tạo http.Handler.
+func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r := chi.NewRouter()
 
-	createH := handleCreate(db, gh, projectID, authz)
-	getTasksH := handleGetTasks(db, projectID, authz)
-	getDetailH := handleGetTaskDetail(db, projectID, authz)
-	approveH := handleApprove(db, gh, d, projectID, authz)
-	rejectH := handleReject(db, gh, projectID, authz)
+	createH := handleCreate(s, authz)
+	getTasksH := handleGetTasks(s.db, s.projectID, authz)
+	getDetailH := handleGetTaskDetail(s.db, s.projectID, authz)
+	approveH := handleApprove(s, authz)
+	rejectH := handleReject(s, authz)
 
 	// Hỗ trợ cả tiền tố /api/tasks và /tasks
 	r.Post("/api/tasks", createH)
@@ -88,7 +107,7 @@ func Handler(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, authz Au
 	return r
 }
 
-func handleCreate(db *sql.DB, gh GitHub, projectID string, authz Authz) http.HandlerFunc {
+func handleCreate(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, role, ok := authz(r)
 		if !ok {
@@ -109,44 +128,21 @@ func handleCreate(db *sql.DB, gh GitHub, projectID string, authz Authz) http.Han
 			return
 		}
 
-		titleTrim := strings.TrimSpace(req.Title)
-		titleLen := utf8.RuneCountInString(titleTrim)
-		if titleLen < 6 || titleLen > 120 {
-			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "tiêu đề sau khi trim phải từ 6 đến 120 ký tự")
-			return
-		}
-
-		descTrim := strings.TrimSpace(req.Description)
-		if utf8.RuneCountInString(descTrim) < 20 {
-			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "mô tả phải từ 20 ký tự trở lên")
-			return
-		}
-
-		issueNum, _, err := gh.CreateIssue(r.Context(), titleTrim, req.Description, []string{"status:pending-approval", "type:feature"})
+		task, err := s.Create(r.Context(), userID, req.Title, req.Description)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "GITHUB_ERROR", "lỗi tạo issue trên GitHub")
-			return
-		}
-
-		taskID := newUUID()
-		_, err = db.ExecContext(r.Context(), `
-			INSERT INTO tasks (id, project_id, github_issue_id, title, description, status, created_by, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		`, taskID, projectID, issueNum, titleTrim, req.Description, userID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi lưu task vào cơ sở dữ liệu")
+			writeServiceError(w, err)
 			return
 		}
 
 		taskData := map[string]any{
-			"id":              taskID,
-			"project_id":      projectID,
-			"parent_id":       nil,
-			"github_issue_id": issueNum,
-			"title":           titleTrim,
-			"description":     req.Description,
-			"status":          "PENDING_APPROVAL",
-			"created_by":      userID,
+			"id":              task.ID,
+			"project_id":      s.projectID,
+			"parent_id":       task.ParentID,
+			"github_issue_id": task.GitHubIssueID,
+			"title":           task.Title,
+			"description":     task.Description,
+			"status":          task.Status,
+			"created_by":      task.CreatedBy,
 		}
 		if role == "ADMIN" {
 			taskData["branch_name"] = nil
@@ -158,7 +154,7 @@ func handleCreate(db *sql.DB, gh GitHub, projectID string, authz Authz) http.Han
 	}
 }
 
-func handleApprove(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, authz Authz) http.HandlerFunc {
+func handleApprove(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, role, ok := authz(r)
 		if !ok {
@@ -171,46 +167,9 @@ func handleApprove(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, au
 		}
 
 		taskID := chi.URLParam(r, "id")
-		var currentStatus string
-		var ghIssueID sql.NullInt64
-		var pID string
-		err := db.QueryRowContext(r.Context(), "SELECT status, github_issue_id, project_id FROM tasks WHERE id = ?", taskID).Scan(&currentStatus, &ghIssueID, &pID)
-		if err == sql.ErrNoRows {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+		if err := s.Approve(r.Context(), taskID); err != nil {
+			writeServiceError(w, err)
 			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn cơ sở dữ liệu")
-			return
-		}
-
-		if currentStatus != "PENDING_APPROVAL" {
-			writeError(w, http.StatusConflict, "INVALID_TRANSITION", "chỉ có thể duyệt task ở trạng thái PENDING_APPROVAL")
-			return
-		}
-
-		res, err := db.ExecContext(r.Context(), "UPDATE tasks SET status = 'PLANNING', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING_APPROVAL'", taskID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi cập nhật trạng thái")
-			return
-		}
-		rows, _ := res.RowsAffected()
-		if rows == 0 {
-			writeError(w, http.StatusConflict, "INVALID_TRANSITION", "chuyển trạng thái không hợp lệ")
-			return
-		}
-
-		if ghIssueID.Valid && gh != nil {
-			_ = gh.SetLabels(r.Context(), int(ghIssueID.Int64), []string{"status:planning", "type:feature"})
-		}
-
-		if d != nil {
-			_, _ = d.EnqueueJob(dispatcher.NewJob{
-				ProjectID:     pID,
-				TaskID:        taskID,
-				Kind:          dispatcher.JobSpec,
-				RequiredAgent: dispatcher.KindClaude,
-			})
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -220,7 +179,7 @@ func handleApprove(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, au
 	}
 }
 
-func handleReject(db *sql.DB, gh GitHub, projectID string, authz Authz) http.HandlerFunc {
+func handleReject(s *Service, authz Authz) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, role, ok := authz(r)
 		if !ok {
@@ -240,42 +199,10 @@ func handleReject(db *sql.DB, gh GitHub, projectID string, authz Authz) http.Han
 			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "body không đúng định dạng json")
 			return
 		}
-		reasonTrim := strings.TrimSpace(req.Reason)
-		if reasonTrim == "" {
-			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "lý do từ chối không được để trống")
-			return
-		}
 
-		var currentStatus string
-		var ghIssueID sql.NullInt64
-		err := db.QueryRowContext(r.Context(), "SELECT status, github_issue_id FROM tasks WHERE id = ?", taskID).Scan(&currentStatus, &ghIssueID)
-		if err == sql.ErrNoRows {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy task")
+		if err := s.Reject(r.Context(), taskID, req.Reason); err != nil {
+			writeServiceError(w, err)
 			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn cơ sở dữ liệu")
-			return
-		}
-
-		if currentStatus != "PENDING_APPROVAL" {
-			writeError(w, http.StatusConflict, "INVALID_TRANSITION", "chỉ có thể từ chối task ở trạng thái PENDING_APPROVAL")
-			return
-		}
-
-		res, err := db.ExecContext(r.Context(), "UPDATE tasks SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING_APPROVAL'", taskID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi cập nhật trạng thái")
-			return
-		}
-		rows, _ := res.RowsAffected()
-		if rows == 0 {
-			writeError(w, http.StatusConflict, "INVALID_TRANSITION", "chuyển trạng thái không hợp lệ")
-			return
-		}
-
-		if ghIssueID.Valid && gh != nil {
-			_ = gh.CloseIssue(r.Context(), int(ghIssueID.Int64), "Từ chối: "+reasonTrim)
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
