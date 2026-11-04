@@ -1,0 +1,3 @@
+495a5803ea007d7d4001be642822f12c7c83a9324ef8a58137ab5566c3cf830d  handoff/tasks/TASK-011-tasks-service/verify.sh
+1221a9c049ea435ff0a287b8a3d9a0e90eca7c25b908d75e2a35cff69f24ea4a  internal/tasks/tasks_test.go
+11838f639ad71da4df680ec38ad69ed2e5efea4cc2ed518f192337837cb0db69  internal/tasks/service_test.go
