@@ -19,6 +19,7 @@ type Hub struct {
 	upgrader websocket.Upgrader
 
 	promptFn   func(dispatcher.Assignment) string
+	repoFn     func(dispatcher.Assignment) string
 	submitHook func(workerID, assignmentID, prURL string, result json.RawMessage)
 	logSink    func(workerID, assignmentID, chunk string)
 
@@ -30,6 +31,12 @@ type Hub struct {
 func WithPrompt(fn func(dispatcher.Assignment) string) Option {
 	return func(h *Hub) {
 		h.promptFn = fn
+	}
+}
+
+func WithRepo(fn func(dispatcher.Assignment) string) Option {
+	return func(h *Hub) {
+		h.repoFn = fn
 	}
 }
 

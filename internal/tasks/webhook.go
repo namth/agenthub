@@ -35,6 +35,17 @@ func OnPullRequestMerged(fn func(prURL string)) WebhookOption {
 
 // WebhookHandler xử lý webhook từ GitHub (POST /api/webhooks/github).
 func WebhookHandler(db *sql.DB, secret, projectID string, opts ...WebhookOption) http.Handler {
+	return newWebhookHandler(db, secret, func(string) (string, bool) {
+		return projectID, true
+	}, opts...)
+}
+
+// WebhookHandlerMulti xử lý webhook từ GitHub cho nhiều dự án theo repository.full_name.
+func WebhookHandlerMulti(db *sql.DB, secret string, projectOf func(fullName string) (projectID string, ok bool), opts ...WebhookOption) http.Handler {
+	return newWebhookHandler(db, secret, projectOf, opts...)
+}
+
+func newWebhookHandler(db *sql.DB, secret string, projectOf func(fullName string) (projectID string, ok bool), opts ...WebhookOption) http.Handler {
 	var cfg webhookConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -72,6 +83,19 @@ func WebhookHandler(db *sql.DB, secret, projectID string, opts ...WebhookOption)
 		expectedMAC := mac.Sum(nil)
 		if !hmac.Equal(sigBytes, expectedMAC) {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chữ ký không khớp")
+			return
+		}
+
+		var repoPayload struct {
+			Repository struct {
+				FullName string `json:"full_name"`
+			} `json:"repository"`
+		}
+		_ = json.Unmarshal(body, &repoPayload)
+
+		projectID, ok := projectOf(repoPayload.Repository.FullName)
+		if !ok || projectID == "" {
+			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua repo không quản lý"})
 			return
 		}
 
@@ -155,7 +179,7 @@ func WebhookHandler(db *sql.DB, secret, projectID string, opts ...WebhookOption)
 
 		// Idempotent: kiểm tra task đã tồn tại với github_issue_id hay chưa
 		var existingID string
-		err = db.QueryRowContext(r.Context(), "SELECT id FROM tasks WHERE github_issue_id = ?", payload.Issue.Number).Scan(&existingID)
+		err = db.QueryRowContext(r.Context(), "SELECT id FROM tasks WHERE github_issue_id = ? AND project_id = ?", payload.Issue.Number, projectID).Scan(&existingID)
 		if err == nil {
 			writeJSON(w, http.StatusOK, map[string]any{"id": existingID, "status": "already_exists"})
 			return

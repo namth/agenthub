@@ -23,10 +23,17 @@ func WithCIGate(on bool) Option {
 	}
 }
 
+func WithGitHubFor(fn func(projectID string) tasks.GitHub) Option {
+	return func(p *Pipeline) {
+		p.ghFor = fn
+	}
+}
+
 type Pipeline struct {
 	db        *sql.DB
 	disp      dispatcher.API
 	gh        tasks.GitHub
+	ghFor     func(projectID string) tasks.GitHub
 	projectID string
 	ciGate    bool
 }
@@ -42,6 +49,37 @@ func New(db *sql.DB, d dispatcher.API, gh tasks.GitHub, projectID string, opts .
 		opt(p)
 	}
 	return p
+}
+
+func (p *Pipeline) githubFor(projectID string) tasks.GitHub {
+	if p.ghFor != nil {
+		if gh := p.ghFor(projectID); gh != nil {
+			return gh
+		}
+	}
+	return p.gh
+}
+
+func (p *Pipeline) RepoFor(a dispatcher.Assignment) string {
+	var repo string
+	err := p.db.QueryRow(`
+		SELECT p.github_repo
+		FROM jobs j
+		JOIN projects p ON p.id = j.project_id
+		WHERE j.id = ?
+	`, a.JobID).Scan(&repo)
+	if err == nil && repo != "" {
+		return repo
+	}
+	if a.TaskID != "" {
+		_ = p.db.QueryRow(`
+			SELECT p.github_repo
+			FROM tasks t
+			JOIN projects p ON p.id = t.project_id
+			WHERE t.id = ?
+		`, a.TaskID).Scan(&repo)
+	}
+	return repo
 }
 
 func clamp(s string, maxLen int) string {
@@ -292,7 +330,7 @@ func (p *Pipeline) OnSubmitted(ctx context.Context, workerID, assignmentID, prUR
 			}
 			labels = append(labels, "status:ready", "type:subtask")
 
-			issueNum, _, err := p.gh.CreateIssue(ctx, subTitle, combinedDesc, labels)
+			issueNum, _, err := p.githubFor(taskProjID).CreateIssue(ctx, subTitle, combinedDesc, labels)
 			if err != nil {
 				return fmt.Errorf("gh.CreateIssue: %w", err)
 			}
