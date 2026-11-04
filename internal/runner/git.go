@@ -18,6 +18,10 @@ type Git interface {
 	Cleanup(ctx context.Context, dir string) error
 }
 
+type Snapshotter interface {
+	Snapshot(ctx context.Context, parentDir string) (dir string, err error)
+}
+
 type realGit struct {
 	repoDir      string
 	worktreeRoot string
@@ -130,6 +134,24 @@ func (g *realGit) DiffStat(ctx context.Context, dir string) string {
 		out, _ = g.gitCmd(ctx, dir, "diff", "--stat")
 	}
 	return out
+}
+
+func (g *realGit) Snapshot(ctx context.Context, parentDir string) (string, error) {
+	targetDir := filepath.Join(parentDir, "repo")
+	_, _ = g.gitCmd(ctx, g.repoDir, "fetch", "origin")
+
+	_, err := g.gitCmd(ctx, g.repoDir, "worktree", "add", "--detach", targetDir, "origin/HEAD")
+	if err == nil {
+		return targetDir, nil
+	}
+
+	for _, ref := range []string{"origin/main", "origin/master", "HEAD"} {
+		_, err = g.gitCmd(ctx, g.repoDir, "worktree", "add", "--detach", targetDir, ref)
+		if err == nil {
+			return targetDir, nil
+		}
+	}
+	return "", err
 }
 
 func (g *realGit) Cleanup(ctx context.Context, dir string) error {
