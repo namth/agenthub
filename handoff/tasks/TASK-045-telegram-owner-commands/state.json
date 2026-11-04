@@ -1,7 +1,7 @@
 {
   "id": "TASK-045",
   "title": "Telegram: lệnh owner /new /tasks /status và nút Merge",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "dd35a33f-0305-4100-bebf-75b6b37131d9",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T21:55:49",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T21:56:50",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
