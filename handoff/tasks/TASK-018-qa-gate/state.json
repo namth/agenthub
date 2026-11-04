@@ -1,0 +1,21 @@
+{
+  "id": "TASK-018",
+  "title": "Chốt chặn CI trước QA, Merge PR → DONE, webhook workflow_run/pull_request",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T09:38:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-018-qa-gate/verify.sh",
+    "internal/pipeline/ci_test.go",
+    "internal/pipeline/pipeline_test.go",
+    "internal/tasks/merge_test.go",
+    "internal/tasks/service_test.go",
+    "internal/tasks/tasks_test.go"
+  ]
+}
