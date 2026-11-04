@@ -1,0 +1,18 @@
+{
+  "id": "TASK-022",
+  "title": "UI đa dự án: ô chọn dự án, SCR-09, Kanban/Tạo yêu cầu theo dự án",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T14:20:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-022-web-projects/verify.sh",
+    "web/src/pages/projects.test.tsx",
+    "web/src/pages/screens.test.tsx"
+  ]
+}
