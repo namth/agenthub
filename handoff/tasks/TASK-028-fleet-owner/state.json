@@ -1,18 +1,39 @@
 {
   "id": "TASK-028",
   "title": "Fleet: chủ máy, phiên bản, lead_eligible, dự án agent; projects open_tasks + tạo lại webhook",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "c08925cd-5726-4c3c-90f5-e9e7609d97f8",
   "history": [
     {
       "at": "2026-11-04T14:16:11",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T14:16:55",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T14:17:18",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T14:27:10",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T14:28:31",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-028-fleet-owner/verify.sh",
     "internal/api/fleet_owner_test.go",
     "internal/projects/projects_ui_test.go"
-  ]
+  ],
+  "via": "agy"
 }
