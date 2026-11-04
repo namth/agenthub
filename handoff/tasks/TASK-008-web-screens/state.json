@@ -1,7 +1,7 @@
 {
   "id": "TASK-008",
   "title": "Giao diện SCR-02 Kanban, SCR-03 Tạo yêu cầu, SCR-05 Fleet",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "1a34408d-4434-4366-8ab2-7fb53d21d782",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T08:57:56",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:00:08",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
