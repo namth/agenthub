@@ -224,7 +224,7 @@ export default function Fleet() {
               </div>
               <p className="mt-1 text-sm text-slate-500">
                 Giữ quyền điều phối · <span className="font-mono font-medium text-slate-700">epoch {lead.epoch}</span>
-                {lead.expires_at && ` · Hết hạn: ${lead.expires_at}`}
+                {lead.expires_at && ` · Gia hạn trước ${new Date(lead.expires_at).toLocaleTimeString('vi-VN')}`}
               </p>
             </div>
             <div>

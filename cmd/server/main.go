@@ -313,6 +313,7 @@ func main() {
 	ctx, stopTick := context.WithCancel(context.Background())
 	go func() {
 		t := time.NewTicker(5 * time.Second)
+		n := 0
 		defer t.Stop()
 		for {
 			select {
@@ -321,6 +322,13 @@ func main() {
 			case <-t.C:
 				if err := disp.Tick(); err != nil {
 					log.Printf("dispatcher tick: %v", err)
+				}
+				if n++; n%6 == 0 {
+					if made, err := pl.Reconcile(ctx); err != nil {
+						log.Printf("pipeline reconcile: %v", err)
+					} else if made > 0 {
+						log.Printf("pipeline reconcile: bù %d job", made)
+					}
 				}
 			}
 		}
