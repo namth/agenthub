@@ -147,12 +147,22 @@ umask "$OLD_UMASK"
 # Cài đặt dịch vụ tự chạy (trừ khi --no-service)
 if [ "$NO_SERVICE" -ne 1 ]; then
     WS_URL=$(echo "$BASE_URL" | sed -e 's/^https:/wss:/' -e 's/^http:/ws:/')
+    # Dịch vụ (launchd/systemd) không có PATH của shell: ghi lại PATH lúc cài để runner tìm được claude/gh/agy.
+    RUNNER_PATH="$PATH"
+    # Cờ --agent dạng kind=lệnh; kind khớp đuôi id agent trên server (…/claude, …/antigravity).
     AGENT_ARGS=""
+    PLIST_AGENTS=""
     if command -v claude >/dev/null 2>&1; then
-        AGENT_ARGS="$AGENT_ARGS --agent claude"
+        AGENT_ARGS="$AGENT_ARGS --agent \"claude=claude -p {prompt}\""
+        PLIST_AGENTS="$PLIST_AGENTS        <string>--agent</string>
+        <string>claude=claude -p {prompt}</string>
+"
     fi
     if command -v agy >/dev/null 2>&1; then
-        AGENT_ARGS="$AGENT_ARGS --agent agy"
+        AGENT_ARGS="$AGENT_ARGS --agent \"antigravity=agy -p {prompt}\""
+        PLIST_AGENTS="$PLIST_AGENTS        <string>--agent</string>
+        <string>antigravity=agy -p {prompt}</string>
+"
     fi
 
     if [ "$OS" = "darwin" ]; then
@@ -174,7 +184,12 @@ if [ "$NO_SERVICE" -ne 1 ]; then
         <string>runner</string>
         <string>--server</string>
         <string>$WS_URL/ws/agent</string>
-    </array>
+${PLIST_AGENTS}    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>$RUNNER_PATH</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -199,6 +214,7 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="PATH=$RUNNER_PATH"
 ExecStart=$TARGET_BIN runner --server $WS_URL/ws/agent$AGENT_ARGS
 Restart=always
 RestartSec=5
