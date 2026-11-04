@@ -584,8 +584,12 @@ func (s *Service) EnqueueJob(j NewJob) (string, error) {
 }
 
 func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
+	var events []Event
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		s.notify(events)
+	}()
 
 	now := s.clk.Now()
 	nowStr := s.formatTime(now)
@@ -694,6 +698,8 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 		return nil, err
 	}
 
+	events = append(events, Event{Type: EvJobAssigned, At: now, AgentID: agentID, AssignmentID: asgID, JobID: jobID, TaskID: taskID, Reason: jobKind})
+
 	return &Assignment{
 		ID:          asgID,
 		JobID:       jobID,
@@ -794,6 +800,7 @@ func (s *Service) Submit(workerID, assignmentID string) error {
 	if err != nil {
 		return err
 	}
+	events = append(events, Event{Type: EvJobSubmitted, At: now, AgentID: agentID, AssignmentID: assignmentID, JobID: jobID})
 
 	_, err = tx.Exec("UPDATE jobs SET status = 'DONE', updated_at = ? WHERE id = ?", nowStr, jobID)
 	if err != nil {

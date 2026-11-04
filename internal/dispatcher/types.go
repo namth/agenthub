@@ -134,6 +134,8 @@ const (
 	EvJobFailed     = "JOB_FAILED"     // vượt MaxAttempts → REPLAN
 	EvAbortTask     = "ABORT_TASK"     // gateway gửi ABORT_TASK tới AgentID
 	EvJobAvailable  = "JOB_AVAILABLE"  // có job mới có thể giao
+	EvJobAssigned   = "JOB_ASSIGNED"   // AgentID, AssignmentID, JobID, TaskID, Reason = job kind (văn phòng ảo)
+	EvJobSubmitted  = "JOB_SUBMITTED"  // AgentID, AssignmentID, JobID
 )
 
 // Notifier nhận sự kiện; cài đặt không được chặn lâu (gateway tự đệm).

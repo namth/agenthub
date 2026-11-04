@@ -49,6 +49,7 @@
     "handoff/tasks/TASK-002-dispatcher-lease/verify.sh",
     "internal/dispatcher/dispatcher_test.go",
     "internal/dispatcher/dispatcher_events_test.go",
+    "internal/dispatcher/dispatcher_office_test.go",
     "internal/dispatcher/types.go"
   ],
   "via": "agy"
