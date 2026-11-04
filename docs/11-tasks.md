@@ -105,6 +105,9 @@
 | TASK-014 | TASK-09 phần Claude review, DEC-12 (pipeline) | accepted |
 | TASK-015 | SCR-04, SCR-07, TASK-17 | accepted |
 | TASK-016 | TASK-07 (backend log) | accepted |
-| TASK-017 | TASK-07 (SCR-06) | đang làm |
+| TASK-017 | TASK-07 (SCR-06) | accepted |
+| TASK-018 | TASK-09 (Chốt chặn CI, Merge → DONE) | accepted |
 
-**Còn lại:** CI GitHub Actions bắt buộc trước QA (Chốt chặn 1 — workflow đã có, chưa nối `workflow_run` vào pipeline); bù job SPEC khi tạo job lỗi lúc duyệt; dọn tiến trình cháu khi huỷ CLI (process group); nút Merge từ dashboard/Telegram (QA_PASSED → DONE).
+**Trưởng phòng tự làm (ngoài handoff):** nối dây `cmd/server/main.go`; sự kiện `JOB_ASSIGNED/SUBMITTED`; giết cả nhóm tiến trình khi huỷ CLI; `Reconcile` bù job còn thiếu (30 giây/lần); nút Merge trên SCR-04; sửa route `/office`; test trọn dây chuyền `internal/e2e`.
+
+**Còn lại (nhỏ):** nhãn chữ trên canvas văn phòng ảo bị cắt, dãy bàn chưa ghi tên máy; Telegram chưa có nút Merge (chỉ web); chưa có dữ liệu thật trên GitHub/Telegram để chạy thử ngoài môi trường test.
