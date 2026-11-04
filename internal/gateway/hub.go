@@ -18,10 +18,12 @@ type Hub struct {
 	auth     Authenticator
 	upgrader websocket.Upgrader
 
-	promptFn   func(dispatcher.Assignment) string
-	repoFn     func(dispatcher.Assignment) string
-	submitHook func(workerID, assignmentID, prURL string, result json.RawMessage)
-	logSink    func(workerID, assignmentID, chunk string)
+	promptFn      func(dispatcher.Assignment) string
+	repoFn        func(dispatcher.Assignment) string
+	submitHook    func(workerID, assignmentID, prURL string, result json.RawMessage)
+	logSink       func(workerID, assignmentID, chunk string)
+	serverVersion string
+	versionSink   func(workerID, version string)
 
 	mu      sync.Mutex
 	clients map[string]*clientConn
@@ -49,6 +51,18 @@ func WithSubmitHook(fn func(workerID, assignmentID, prURL string, result json.Ra
 func WithLogSink(fn func(workerID, assignmentID, chunk string)) Option {
 	return func(h *Hub) {
 		h.logSink = fn
+	}
+}
+
+func WithServerVersion(v string) Option {
+	return func(h *Hub) {
+		h.serverVersion = v
+	}
+}
+
+func WithVersionSink(fn func(workerID, version string)) Option {
+	return func(h *Hub) {
+		h.versionSink = fn
 	}
 }
 
@@ -85,6 +99,21 @@ func (h *Hub) Close() error {
 		c.close()
 	}
 	return nil
+}
+
+func (h *Hub) CloseWorker(workerID string) bool {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return false
+	}
+	c := h.clients[workerID]
+	h.mu.Unlock()
+
+	if c == nil {
+		return false
+	}
+	return c.close()
 }
 
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
