@@ -31,11 +31,14 @@ func newClientConn(hub *Hub, workerID string, ws *websocket.Conn) *clientConn {
 	}
 }
 
-func (c *clientConn) close() {
+func (c *clientConn) close() bool {
+	var closed bool
 	c.closeOnce.Do(func() {
+		closed = true
 		close(c.closed)
 		_ = c.ws.Close()
 	})
+	return closed
 }
 
 func (c *clientConn) enqueue(data []byte) {
@@ -172,8 +175,9 @@ func (c *clientConn) handleMessage(raw []byte) {
 }
 
 type handshakeData struct {
-	OS     string `json:"os"`
-	Agents []struct {
+	OS      string `json:"os"`
+	Version string `json:"version"`
+	Agents  []struct {
 		Kind string `json:"kind"`
 	} `json:"agents"`
 }
@@ -199,6 +203,10 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 
 	c.handshaken = true
 
+	if d.Version != "" && c.hub.versionSink != nil {
+		c.hub.versionSink(c.workerID, d.Version)
+	}
+
 	type agentItem struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
@@ -214,6 +222,9 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 	resp := map[string]any{
 		"event":  "HANDSHAKE_OK",
 		"agents": respAgents,
+	}
+	if c.hub.serverVersion != "" {
+		resp["server_version"] = c.hub.serverVersion
 	}
 	b, _ := json.Marshal(resp)
 	c.send(b)

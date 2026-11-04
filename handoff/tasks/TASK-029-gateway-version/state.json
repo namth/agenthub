@@ -1,17 +1,33 @@
 {
   "id": "TASK-029",
   "title": "Gateway: trao đổi phiên bản trong handshake, CloseWorker",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "fcec571a-80da-4b7d-b8bc-9ffbb962492d",
   "history": [
     {
       "at": "2026-11-04T14:22:52",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T14:26:33",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T14:26:47",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T14:33:36",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
     "handoff/tasks/TASK-029-gateway-version/verify.sh",
     "internal/gateway/version_test.go"
-  ]
+  ],
+  "via": "agy"
 }
