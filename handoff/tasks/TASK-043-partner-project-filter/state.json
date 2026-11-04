@@ -1,0 +1,17 @@
+{
+  "id": "TASK-043",
+  "title": "Dispatcher: máy partner chỉ nhận việc dự án mình là thành viên",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:29:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-043-partner-project-filter/verify.sh",
+    "internal/dispatcher/partner_filter_test.go"
+  ]
+}

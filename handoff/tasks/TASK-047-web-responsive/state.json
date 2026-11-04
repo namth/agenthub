@@ -1,0 +1,17 @@
+{
+  "id": "TASK-047",
+  "title": "Web dùng được trên điện thoại 375px",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:29:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-047-web-responsive/verify.sh",
+    "web/src/layout/responsive.test.tsx"
+  ]
+}

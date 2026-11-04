@@ -1,0 +1,17 @@
+{
+  "id": "TASK-036",
+  "title": "Migration 005: WAITING_USER, làm rõ, allowlist, token, sandbox",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:29:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-036-migration-005/verify.sh",
+    "internal/database/migrate005_test.go"
+  ]
+}
