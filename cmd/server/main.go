@@ -214,7 +214,7 @@ func main() {
 			tg.Notify(e)
 		}
 	}))
-	pl = pipeline.New(db, disp, gh, projectID)
+	pl = pipeline.New(db, disp, gh, projectID, pipeline.WithCIGate(os.Getenv("CI_GATE") == "true"))
 	logStore := logs.NewStore(db, time.Now, 5000)
 	hub = gateway.New(disp, gateway.DBAuthenticator(db),
 		gateway.WithLogSink(func(workerID, assignmentID, chunk string) {
@@ -253,12 +253,19 @@ func main() {
 		return u.ID, u.Role, ok
 	}
 	fleetAPI := api.FleetHandler(db, disp, roleOf)
-	tasksSvc := tasks.NewService(db, gh, disp, projectID, tasks.WithOnCreated(func(c tasks.Created) {
-		bus.Emit(office.Event{Who: "admin", Type: "work", Task: c.TaskID, Text: "Yêu cầu mới: " + c.Title})
-		if tg != nil {
-			tg.NotifyNewTask(c.TaskID, c.Issue, c.Title, c.Requester, c.Description)
-		}
-	}))
+	tasksSvc := tasks.NewService(db, gh, disp, projectID,
+		tasks.WithMerger(tasks.NewGitHubMerger("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)),
+		tasks.WithOnMerged(func(prURL string) {
+			if err := pl.OnMerged(context.Background(), prURL); err != nil {
+				log.Printf("pipeline merged: %v", err)
+			}
+		}),
+		tasks.WithOnCreated(func(c tasks.Created) {
+			bus.Emit(office.Event{Who: "admin", Type: "work", Task: c.TaskID, Text: "Yêu cầu mới: " + c.Title})
+			if tg != nil {
+				tg.NotifyNewTask(c.TaskID, c.Issue, c.Title, c.Requester, c.Description)
+			}
+		}))
 	tasksAPI := tasks.HandlerWithService(tasksSvc, userOf)
 	officeAPI := office.Handler(db, bus, func() (any, error) { return fleetSnapshot(db, disp) }, roleOf, office.Options{})
 
@@ -278,7 +285,17 @@ func main() {
 		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandler(tgSender, tasksSvc, tgChat, secret)})
 	}
 	if secret := os.Getenv("GITHUB_WEBHOOK_SECRET"); secret != "" {
-		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: tasks.WebhookHandler(db, secret, projectID)})
+		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: tasks.WebhookHandler(db, secret, projectID,
+			tasks.OnWorkflowRun(func(branch, conclusion, url string) {
+				if err := pl.OnCI(context.Background(), branch, conclusion, url); err != nil {
+					log.Printf("pipeline ci: %v", err)
+				}
+			}),
+			tasks.OnPullRequestMerged(func(prURL string) {
+				if err := pl.OnMerged(context.Background(), prURL); err != nil {
+					log.Printf("pipeline merged: %v", err)
+				}
+			}))})
 	} else {
 		log.Println("GITHUB_WEBHOOK_SECRET trống: tắt webhook GitHub")
 	}

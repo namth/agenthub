@@ -26,6 +26,7 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_pat_for_api_calls
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
 TELEGRAM_ADMIN_CHAT_ID=987654321
 TELEGRAM_WEBHOOK_SECRET=random_secret_for_telegram_webhook   # header X-Telegram-Bot-Api-Secret-Token
+CI_GATE=true   # true: chỉ tạo job Claude review sau khi GitHub Actions CI đạt (Chốt chặn 1, docs/13 §2)
 TZ_DISPLAY=Asia/Ho_Chi_Minh   # múi giờ hiển thị giờ trong tin Telegram và văn phòng ảo
 
 # AGENT FLEET SECURITY
