@@ -25,6 +25,8 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_pat_for_api_calls
 # TELEGRAM BOT ALERTS
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
 TELEGRAM_ADMIN_CHAT_ID=987654321
+TELEGRAM_WEBHOOK_SECRET=random_secret_for_telegram_webhook   # header X-Telegram-Bot-Api-Secret-Token
+TZ_DISPLAY=Asia/Ho_Chi_Minh   # múi giờ hiển thị giờ trong tin Telegram và văn phòng ảo
 
 # AGENT FLEET SECURITY
 RUNNER_REGISTRATION_KEY=master_key_for_registering_new_runners

@@ -19,9 +19,11 @@ import (
 	"github.com/namth/agenthub/internal/database"
 	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
+	"github.com/namth/agenthub/internal/office"
 	"github.com/namth/agenthub/internal/runner"
 	"github.com/namth/agenthub/internal/server"
 	"github.com/namth/agenthub/internal/tasks"
+	"github.com/namth/agenthub/internal/telegram"
 	"github.com/namth/agenthub/web"
 )
 
@@ -53,6 +55,78 @@ func configFromEnv() dispatcher.Config {
 		c.MaxAttempts = v
 	}
 	return c
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// fleetSnapshot dựng ảnh chụp cụm máy cho văn phòng ảo (cùng dạng lead/workers với GET /api/fleet, rút gọn).
+func fleetSnapshot(db *sql.DB, disp dispatcher.API) (any, error) {
+	lease, err := disp.Lead()
+	if err != nil {
+		return nil, err
+	}
+	var leadID any
+	if lease.AgentID != "" {
+		leadID = lease.AgentID
+	}
+	type agent struct {
+		ID            string  `json:"id"`
+		Kind          string  `json:"kind"`
+		Status        string  `json:"status"`
+		CooldownUntil *string `json:"cooldown_until"`
+	}
+	type worker struct {
+		ID         string  `json:"id"`
+		ConnStatus string  `json:"conn_status"`
+		Agents     []agent `json:"agents"`
+	}
+	workers := []*worker{}
+	byID := map[string]*worker{}
+	rows, err := db.Query(`SELECT id, conn_status FROM workers ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		w := &worker{Agents: []agent{}}
+		if err := rows.Scan(&w.ID, &w.ConnStatus); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		workers = append(workers, w)
+		byID[w.ID] = w
+	}
+	rows.Close()
+	rows, err = db.Query(`SELECT id, worker_id, kind, status, cooldown_until FROM agents ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var a agent
+		var wid string
+		var cu sql.NullString
+		if err := rows.Scan(&a.ID, &wid, &a.Kind, &a.Status, &cu); err != nil {
+			return nil, err
+		}
+		if cu.Valid {
+			if t, err := time.Parse("2006-01-02 15:04:05", cu.String); err == nil {
+				v := t.UTC().Format(time.RFC3339)
+				a.CooldownUntil = &v
+			}
+		}
+		if w := byID[wid]; w != nil {
+			w.Agents = append(w.Agents, a)
+		}
+	}
+	return map[string]any{
+		"lead":    map[string]any{"state": lease.State, "agent_id": leadID, "epoch": lease.Epoch},
+		"workers": workers,
+	}, rows.Err()
 }
 
 func randomHex(n int) string {
@@ -99,10 +173,31 @@ func main() {
 	}
 	defer db.Close()
 
+	loc, err := time.LoadLocation(envOr("TZ_DISPLAY", "Asia/Ho_Chi_Minh"))
+	if err != nil {
+		loc = time.UTC
+	}
+	bus := office.NewBus(400, time.Now, loc)
+
+	var tg *telegram.Notifier
+	tgToken, tgChat := os.Getenv("TELEGRAM_BOT_TOKEN"), os.Getenv("TELEGRAM_ADMIN_CHAT_ID")
+	var tgSender telegram.Sender
+	if tgToken != "" && tgChat != "" {
+		tgSender = telegram.NewBotAPI(tgToken, "", nil)
+		tg = telegram.NewNotifier(tgSender, tgChat, loc)
+		defer tg.Close()
+	} else {
+		log.Println("TELEGRAM_BOT_TOKEN/TELEGRAM_ADMIN_CHAT_ID trống: tắt thông báo Telegram")
+	}
+
 	var hub *gateway.Hub
 	disp := dispatcher.New(db, realClock{}, configFromEnv(), notifierFunc(func(e dispatcher.Event) {
 		if hub != nil {
 			hub.Notify(e)
+		}
+		bus.Notify(e)
+		if tg != nil {
+			tg.Notify(e)
 		}
 	}))
 	hub = gateway.New(disp, gateway.DBAuthenticator(db))
@@ -138,7 +233,14 @@ func main() {
 	}
 	gh := tasks.NewGitHubClient("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
 	fleetAPI := api.FleetHandler(db, disp, roleOf)
-	tasksAPI := tasks.Handler(db, gh, disp, projectID, userOf)
+	tasksSvc := tasks.NewService(db, gh, disp, projectID, tasks.WithOnCreated(func(c tasks.Created) {
+		bus.Emit(office.Event{Who: "admin", Type: "work", Task: c.TaskID, Text: "Yêu cầu mới: " + c.Title})
+		if tg != nil {
+			tg.NotifyNewTask(c.TaskID, c.Issue, c.Title, c.Requester, c.Description)
+		}
+	}))
+	tasksAPI := tasks.HandlerWithService(tasksSvc, userOf)
+	officeAPI := office.Handler(db, bus, func() (any, error) { return fleetSnapshot(db, disp) }, roleOf, office.Options{})
 
 	mounts := []server.Mount{
 		{Pattern: "/ws/agent", Handler: hub},
@@ -148,6 +250,11 @@ func main() {
 		{Pattern: "/api/admin/agents/*", Handler: fleetAPI},
 		{Pattern: "/api/tasks", Handler: tasksAPI},
 		{Pattern: "/api/tasks/*", Handler: tasksAPI},
+		{Pattern: "/api/admin/settings", Handler: officeAPI},
+		{Pattern: "/api/admin/office/*", Handler: officeAPI},
+	}
+	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" && tgSender != nil {
+		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/telegram", Handler: telegram.WebhookHandler(tgSender, tasksSvc, tgChat, secret)})
 	}
 	if secret := os.Getenv("GITHUB_WEBHOOK_SECRET"); secret != "" {
 		mounts = append(mounts, server.Mount{Pattern: "/api/webhooks/github", Handler: tasks.WebhookHandler(db, secret, projectID)})
