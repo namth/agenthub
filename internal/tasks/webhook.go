@@ -14,6 +14,7 @@ import (
 type webhookConfig struct {
 	onWorkflowRun       func(branch, conclusion, url string)
 	onPullRequestMerged func(prURL string)
+	onIssueComment      func(projectID string, issue int, login, body string)
 }
 
 // WebhookOption cấu hình cho WebhookHandler.
@@ -30,6 +31,13 @@ func OnWorkflowRun(fn func(branch, conclusion, url string)) WebhookOption {
 func OnPullRequestMerged(fn func(prURL string)) WebhookOption {
 	return func(cfg *webhookConfig) {
 		cfg.onPullRequestMerged = fn
+	}
+}
+
+// WithOnIssueComment đăng ký callback khi có sự kiện issue_comment với action "created".
+func WithOnIssueComment(fn func(projectID string, issue int, login, body string)) WebhookOption {
+	return func(cfg *webhookConfig) {
+		cfg.onIssueComment = fn
 	}
 }
 
@@ -148,6 +156,34 @@ func newWebhookHandler(db *sql.DB, secret string, projectOf func(fullName string
 				return
 			}
 			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua pull_request chưa merge"})
+			return
+		}
+
+		if event == "issue_comment" {
+			var payload struct {
+				Action string `json:"action"`
+				Issue  struct {
+					Number int `json:"number"`
+				} `json:"issue"`
+				Comment struct {
+					Body string `json:"body"`
+					User struct {
+						Login string `json:"login"`
+					} `json:"user"`
+				} `json:"comment"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payload json không hợp lệ")
+				return
+			}
+			if payload.Action == "created" {
+				if cfg.onIssueComment != nil {
+					cfg.onIssueComment(projectID, payload.Issue.Number, payload.Comment.User.Login, payload.Comment.Body)
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"message": "issue_comment processed"})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua issue_comment không phải created"})
 			return
 		}
 

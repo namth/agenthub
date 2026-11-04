@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -267,6 +268,14 @@ func main() {
 				Task: taskID,
 			})
 		}),
+		tasks.WithOnClarified(func(taskID string, round int, byLogin, via string) {
+			bus.Emit(office.Event{
+				Who:  "user:" + byLogin,
+				Type: "work",
+				Task: taskID,
+				Text: fmt.Sprintf("Làm rõ vòng %d (%s)", round, via),
+			})
+		}),
 	}
 	var tasksSvc *tasks.Service
 	if multi {
@@ -364,6 +373,18 @@ func main() {
 				if err := pl.OnMerged(context.Background(), prURL); err != nil {
 					log.Printf("pipeline merged: %v", err)
 				}
+			}),
+			tasks.WithOnIssueComment(func(projectID string, issue int, login, body string) {
+				answers, ok := tasks.ParseAnswerComment(body)
+				if !ok {
+					return
+				}
+				var taskID string
+				err := db.QueryRow(`SELECT id FROM tasks WHERE project_id = ? AND github_issue_id = ?`, projectID, issue).Scan(&taskID)
+				if err != nil {
+					return
+				}
+				_ = tasksSvc.AnswerByLogin(context.Background(), login, taskID, answers)
 			}),
 		}
 		var wh http.Handler

@@ -171,3 +171,11 @@ func (c *TelegramCommander) TaskStatus(ctx context.Context, id string) (telegram
 func (c *TelegramCommander) Merge(ctx context.Context, id string) error {
 	return c.svc.Merge(ctx, id)
 }
+
+func (c *TelegramCommander) PickOption(ctx context.Context, taskID string, round int, questionID string, optionIdx int) (bool, error) {
+	userID, err := c.getOwnerUserID(ctx)
+	if err != nil {
+		return false, err
+	}
+	return c.svc.PickOption(ctx, userID, taskID, round, questionID, optionIdx)
+}

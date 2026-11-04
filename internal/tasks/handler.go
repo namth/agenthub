@@ -54,6 +54,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrValidation):
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+	case errors.Is(err, ErrForbidden):
+		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 	case errors.Is(err, ErrNotFound):
 		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 	case errors.Is(err, ErrInvalidTransition):
@@ -90,12 +92,18 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	approveH := handleApprove(s, authz)
 	rejectH := handleReject(s, authz)
 	mergeH := handleMerge(s, authz)
+	clarificationsH := handleGetClarifications(s, authz)
+	clarifyH := handleClarify(s, authz)
+	clarifyAutoH := handleClarifyAuto(s, authz)
 
 	// Hỗ trợ cả tiền tố /api/tasks và /tasks
 	r.Post("/api/tasks", createH)
 	r.Post("/api/tasks/", createH)
 	r.Get("/api/tasks", getTasksH)
 	r.Get("/api/tasks/", getTasksH)
+	r.Get("/api/tasks/{id}/clarifications", clarificationsH)
+	r.Post("/api/tasks/{id}/clarify", clarifyH)
+	r.Post("/api/tasks/{id}/clarify/auto", clarifyAutoH)
 	r.Get("/api/tasks/{id}", getDetailH)
 	r.Post("/api/tasks/{id}/approve", approveH)
 	r.Post("/api/tasks/{id}/reject", rejectH)
@@ -105,6 +113,9 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r.Post("/tasks/", createH)
 	r.Get("/tasks", getTasksH)
 	r.Get("/tasks/", getTasksH)
+	r.Get("/tasks/{id}/clarifications", clarificationsH)
+	r.Post("/tasks/{id}/clarify", clarifyH)
+	r.Post("/tasks/{id}/clarify/auto", clarifyAutoH)
 	r.Get("/tasks/{id}", getDetailH)
 	r.Post("/tasks/{id}/approve", approveH)
 	r.Post("/tasks/{id}/reject", rejectH)
@@ -380,7 +391,9 @@ func handleGetTasks(s *Service, authz Authz) http.HandlerFunc {
 			}
 		}
 
-		query := `SELECT id, project_id, parent_id, github_issue_id, title, status, assigned_worker_id, branch_name, pr_url, created_at FROM tasks WHERE 1=1`
+		query := `SELECT tasks.id, tasks.project_id, tasks.parent_id, tasks.github_issue_id, tasks.title, tasks.status, tasks.assigned_worker_id, tasks.branch_name, tasks.pr_url, tasks.created_at,
+			(SELECT questions FROM task_clarifications WHERE task_id = tasks.id AND status = 'WAITING' ORDER BY round DESC LIMIT 1) AS clarify_questions
+			FROM tasks WHERE 1=1`
 		var args []any
 
 		if filterProjectID != "" {
@@ -418,19 +431,27 @@ func handleGetTasks(s *Service, authz Authz) http.HandlerFunc {
 
 		for rows.Next() {
 			var id, pID, title, st, createdAt string
-			var parentID, assignedWorker, branch, pr sql.NullString
+			var parentID, assignedWorker, branch, pr, clarifyQuestions sql.NullString
 			var ghIssueID sql.NullInt64
 
-			if err := rows.Scan(&id, &pID, &parentID, &ghIssueID, &title, &st, &assignedWorker, &branch, &pr, &createdAt); err != nil {
+			if err := rows.Scan(&id, &pID, &parentID, &ghIssueID, &title, &st, &assignedWorker, &branch, &pr, &createdAt, &clarifyQuestions); err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi đọc dòng task")
 				return
+			}
+
+			clarifyPending := 0
+			if clarifyQuestions.Valid && clarifyQuestions.String != "" {
+				var qs []any
+				if err := json.Unmarshal([]byte(clarifyQuestions.String), &qs); err == nil {
+					clarifyPending = len(qs)
+				}
 			}
 
 			colIdx := -1
 			switch st {
 			case "PENDING_APPROVAL":
 				colIdx = 0
-			case "PLANNING", "READY":
+			case "PLANNING", "READY", "WAITING_USER":
 				colIdx = 1
 			case "IN_PROGRESS":
 				colIdx = 2
@@ -442,11 +463,12 @@ func handleGetTasks(s *Service, authz Authz) http.HandlerFunc {
 
 			if colIdx >= 0 {
 				card := map[string]any{
-					"id":         id,
-					"project_id": pID,
-					"title":      title,
-					"status":     st,
-					"created_at": createdAt,
+					"id":              id,
+					"project_id":      pID,
+					"title":           title,
+					"status":          st,
+					"created_at":      createdAt,
+					"clarify_pending": clarifyPending,
 				}
 				if ghIssueID.Valid {
 					card["github_issue_id"] = ghIssueID.Int64
@@ -645,5 +667,75 @@ func handleGetTaskDetail(s *Service, authz Authz) http.HandlerFunc {
 
 		taskMap["subtasks"] = subtasksList
 		writeJSON(w, http.StatusOK, taskMap)
+	}
+}
+
+func handleGetClarifications(s *Service, authz Authz) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, role, ok := authz(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
+			return
+		}
+
+		taskID := chi.URLParam(r, "id")
+		view, err := s.Clarifications(r.Context(), userID, role, taskID)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, view)
+	}
+}
+
+func handleClarify(s *Service, authz Authz) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, role, ok := authz(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
+			return
+		}
+
+		taskID := chi.URLParam(r, "id")
+		var req struct {
+			Answers map[string]string `json:"answers"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "body không đúng định dạng json")
+			return
+		}
+		if req.Answers == nil {
+			req.Answers = make(map[string]string)
+		}
+
+		if err := s.Clarify(r.Context(), userID, role, taskID, req.Answers, "WEB"); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "PLANNING",
+		})
+	}
+}
+
+func handleClarifyAuto(s *Service, authz Authz) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, role, ok := authz(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
+			return
+		}
+
+		taskID := chi.URLParam(r, "id")
+		if err := s.ClarifyAuto(r.Context(), userID, role, taskID); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "PLANNING",
+		})
 	}
 }
