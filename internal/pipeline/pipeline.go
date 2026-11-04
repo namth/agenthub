@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,20 +15,33 @@ import (
 	"github.com/namth/agenthub/internal/tasks"
 )
 
+type Option func(*Pipeline)
+
+func WithCIGate(on bool) Option {
+	return func(p *Pipeline) {
+		p.ciGate = on
+	}
+}
+
 type Pipeline struct {
 	db        *sql.DB
 	disp      dispatcher.API
 	gh        tasks.GitHub
 	projectID string
+	ciGate    bool
 }
 
-func New(db *sql.DB, d dispatcher.API, gh tasks.GitHub, projectID string) *Pipeline {
-	return &Pipeline{
+func New(db *sql.DB, d dispatcher.API, gh tasks.GitHub, projectID string, opts ...Option) *Pipeline {
+	p := &Pipeline{
 		db:        db,
 		disp:      d,
 		gh:        gh,
 		projectID: projectID,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 func clamp(s string, maxLen int) string {
@@ -55,9 +69,13 @@ func (p *Pipeline) getLeadEpoch(ctx context.Context) int64 {
 func (p *Pipeline) addJournalNote(ctx context.Context, taskID, agentID, entry string) {
 	epoch := p.getLeadEpoch(ctx)
 	entry = clamp(entry, 4000)
+	var agentVal any = agentID
+	if agentID == "" {
+		agentVal = nil
+	}
 	_, _ = p.db.ExecContext(ctx,
 		`INSERT INTO lead_journal (epoch, agent_id, task_id, kind, entry) VALUES (?, ?, ?, 'NOTE', ?)`,
-		epoch, agentID, taskID, entry,
+		epoch, agentVal, taskID, entry,
 	)
 }
 
@@ -320,6 +338,10 @@ func (p *Pipeline) OnSubmitted(ctx context.Context, workerID, assignmentID, prUR
 			return fmt.Errorf("update task WAITING_QA: %w", err)
 		}
 
+		if p.ciGate {
+			return nil
+		}
+
 		branch := jobBranch.String
 		if branch == "" {
 			branch = taskBranch.String
@@ -407,5 +429,178 @@ func (p *Pipeline) OnSubmitted(ctx context.Context, workerID, assignmentID, prUR
 		return nil
 	}
 
+	return nil
+}
+
+func (p *Pipeline) OnCI(ctx context.Context, branch, conclusion, runURL string) error {
+	switch conclusion {
+	case "success", "failure", "timed_out":
+	default:
+		return nil
+	}
+
+	var (
+		taskID     string
+		taskProjID string
+	)
+	err := p.db.QueryRowContext(ctx, `
+		SELECT t.id, t.project_id
+		FROM tasks t
+		JOIN jobs j ON j.task_id = t.id
+		WHERE t.status = 'WAITING_QA'
+		  AND j.kind = 'CODE'
+		  AND (j.branch_name = ? OR t.branch_name = ?)
+		ORDER BY j.created_at DESC, j.id DESC
+		LIMIT 1
+	`, branch, branch).Scan(&taskID, &taskProjID)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find task for branch %q: %w", branch, err)
+	}
+
+	if conclusion == "success" {
+		var activeReviews int
+		err := p.db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM jobs
+			WHERE task_id = ? AND kind = 'QA_REVIEW' AND status IN ('QUEUED', 'RUNNING')
+		`, taskID).Scan(&activeReviews)
+		if err != nil {
+			return fmt.Errorf("check active qa_review: %w", err)
+		}
+		if activeReviews > 0 {
+			return nil
+		}
+
+		_, err = p.disp.EnqueueJob(dispatcher.NewJob{
+			ProjectID:     taskProjID,
+			TaskID:        taskID,
+			Kind:          dispatcher.JobQAReview,
+			RequiredAgent: dispatcher.KindClaude,
+			BranchName:    branch,
+		})
+		if err != nil {
+			return fmt.Errorf("enqueue qa_review: %w", err)
+		}
+		return nil
+	}
+
+	// conclusion == "failure" || conclusion == "timed_out"
+	res, err := p.db.ExecContext(ctx,
+		`UPDATE tasks SET status = 'READY', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'WAITING_QA'`,
+		taskID,
+	)
+	if err != nil {
+		return fmt.Errorf("update task READY: %w", err)
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return nil
+	}
+
+	p.addJournalNote(ctx, taskID, "", fmt.Sprintf("CI kết thúc với %s: %s", conclusion, runURL))
+
+	_, err = p.disp.EnqueueJob(dispatcher.NewJob{
+		ProjectID:     taskProjID,
+		TaskID:        taskID,
+		Kind:          dispatcher.JobCode,
+		RequiredAgent: dispatcher.KindAntigravity,
+		BranchName:    branch,
+	})
+	if err != nil {
+		return fmt.Errorf("enqueue code job: %w", err)
+	}
+	return nil
+}
+
+func (p *Pipeline) OnMerged(ctx context.Context, prURL string) error {
+	if strings.TrimSpace(prURL) == "" {
+		return nil
+	}
+
+	rows, err := p.db.QueryContext(ctx, `SELECT id, parent_id FROM tasks WHERE pr_url = ? AND status = 'QA_PASSED'`, prURL)
+	if err != nil {
+		return fmt.Errorf("query task by pr_url: %w", err)
+	}
+	defer rows.Close()
+
+	type taskToMerge struct {
+		id       string
+		parentID sql.NullString
+	}
+	var tasksToMerge []taskToMerge
+	for rows.Next() {
+		var item taskToMerge
+		if err := rows.Scan(&item.id, &item.parentID); err != nil {
+			return err
+		}
+		tasksToMerge = append(tasksToMerge, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if len(tasksToMerge) == 0 {
+		return nil
+	}
+
+	for _, t := range tasksToMerge {
+		res, err := p.db.ExecContext(ctx,
+			`UPDATE tasks SET status = 'DONE', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QA_PASSED'`,
+			t.id,
+		)
+		if err != nil {
+			return fmt.Errorf("update task DONE: %w", err)
+		}
+		affected, _ := res.RowsAffected()
+		if affected > 0 && t.parentID.Valid && t.parentID.String != "" {
+			if err := p.rollUpParent(ctx, t.parentID.String); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Pipeline) rollUpParent(ctx context.Context, parentID string) error {
+	for parentID != "" {
+		var notDone int
+		err := p.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'DONE'`, parentID).Scan(&notDone)
+		if err != nil {
+			return fmt.Errorf("count non-done subtasks: %w", err)
+		}
+		if notDone > 0 {
+			break
+		}
+
+		var grandParentID sql.NullString
+		err = p.db.QueryRowContext(ctx, `SELECT parent_id FROM tasks WHERE id = ? AND status != 'REJECTED'`, parentID).Scan(&grandParentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				break
+			}
+			return err
+		}
+
+		res, err := p.db.ExecContext(ctx,
+			`UPDATE tasks SET status = 'DONE', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'REJECTED'`,
+			parentID,
+		)
+		if err != nil {
+			return fmt.Errorf("update parent DONE: %w", err)
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			break
+		}
+
+		if grandParentID.Valid && grandParentID.String != "" {
+			parentID = grandParentID.String
+		} else {
+			break
+		}
+	}
 	return nil
 }

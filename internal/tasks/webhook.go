@@ -11,8 +11,35 @@ import (
 	"strings"
 )
 
+type webhookConfig struct {
+	onWorkflowRun       func(branch, conclusion, url string)
+	onPullRequestMerged func(prURL string)
+}
+
+// WebhookOption cấu hình cho WebhookHandler.
+type WebhookOption func(*webhookConfig)
+
+// OnWorkflowRun đăng ký callback khi có sự kiện workflow_run với action "completed".
+func OnWorkflowRun(fn func(branch, conclusion, url string)) WebhookOption {
+	return func(cfg *webhookConfig) {
+		cfg.onWorkflowRun = fn
+	}
+}
+
+// OnPullRequestMerged đăng ký callback khi có sự kiện pull_request với action "closed" và merged=true.
+func OnPullRequestMerged(fn func(prURL string)) WebhookOption {
+	return func(cfg *webhookConfig) {
+		cfg.onPullRequestMerged = fn
+	}
+}
+
 // WebhookHandler xử lý webhook từ GitHub (POST /api/webhooks/github).
-func WebhookHandler(db *sql.DB, secret, projectID string) http.Handler {
+func WebhookHandler(db *sql.DB, secret, projectID string, opts ...WebhookOption) http.Handler {
+	var cfg webhookConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "chỉ hỗ trợ method POST")
@@ -49,6 +76,57 @@ func WebhookHandler(db *sql.DB, secret, projectID string) http.Handler {
 		}
 
 		event := r.Header.Get("X-GitHub-Event")
+		if event == "workflow_run" {
+			var payload struct {
+				Action      string `json:"action"`
+				WorkflowRun struct {
+					HeadBranch string  `json:"head_branch"`
+					Conclusion *string `json:"conclusion"`
+					HTMLURL    string  `json:"html_url"`
+				} `json:"workflow_run"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payload json không hợp lệ")
+				return
+			}
+			if payload.Action == "completed" {
+				if cfg.onWorkflowRun != nil {
+					conclusion := ""
+					if payload.WorkflowRun.Conclusion != nil {
+						conclusion = *payload.WorkflowRun.Conclusion
+					}
+					cfg.onWorkflowRun(payload.WorkflowRun.HeadBranch, conclusion, payload.WorkflowRun.HTMLURL)
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"message": "workflow_run completed"})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua workflow_run không phải completed"})
+			return
+		}
+
+		if event == "pull_request" {
+			var payload struct {
+				Action      string `json:"action"`
+				PullRequest struct {
+					Merged  bool   `json:"merged"`
+					HTMLURL string `json:"html_url"`
+				} `json:"pull_request"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payload json không hợp lệ")
+				return
+			}
+			if payload.Action == "closed" && payload.PullRequest.Merged {
+				if cfg.onPullRequestMerged != nil {
+					cfg.onPullRequestMerged(payload.PullRequest.HTMLURL)
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"message": "pull_request merged"})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua pull_request chưa merge"})
+			return
+		}
+
 		if event != "issues" {
 			writeJSON(w, http.StatusAccepted, map[string]string{"message": "bỏ qua sự kiện không phải issues"})
 			return

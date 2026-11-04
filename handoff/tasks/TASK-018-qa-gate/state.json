@@ -1,13 +1,23 @@
 {
   "id": "TASK-018",
   "title": "Chốt chặn CI trước QA, Merge PR → DONE, webhook workflow_run/pull_request",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "in_progress",
+  "conversation_id": "57a1195c-1822-4c44-882e-1d5cafcd308f",
   "history": [
     {
       "at": "2026-11-04T09:38:04",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T09:40:00",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T09:40:16",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
     }
   ],
   "locked_files": [
@@ -17,5 +27,6 @@
     "internal/tasks/merge_test.go",
     "internal/tasks/service_test.go",
     "internal/tasks/tasks_test.go"
-  ]
+  ],
+  "via": "agy"
 }

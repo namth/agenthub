@@ -177,3 +177,65 @@ func (c *ghClient) CloseIssue(ctx context.Context, number int, comment string) e
 	}
 	return nil
 }
+
+// Merger là interface gộp Pull Request trên GitHub.
+type Merger interface {
+	MergePR(ctx context.Context, number int) error
+}
+
+type ghMerger struct {
+	apiURL string
+	owner  string
+	repo   string
+	token  string
+	hc     *http.Client
+}
+
+// NewGitHubMerger khởi tạo client gộp PR; apiURL rỗng → https://api.github.com.
+func NewGitHubMerger(apiURL, owner, repo, token string, hc *http.Client) Merger {
+	if apiURL == "" {
+		apiURL = "https://api.github.com"
+	}
+	apiURL = strings.TrimRight(apiURL, "/")
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	return &ghMerger{
+		apiURL: apiURL,
+		owner:  owner,
+		repo:   repo,
+		token:  token,
+		hc:     hc,
+	}
+}
+
+func (m *ghMerger) MergePR(ctx context.Context, number int) error {
+	reqBody := map[string]any{
+		"merge_method": "squash",
+	}
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+	u := fmt.Sprintf("%s/repos/%s/%s/pulls/%d/merge", m.apiURL, m.owner, m.repo, number)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+	if m.token != "" {
+		req.Header.Set("Authorization", "Bearer "+m.token)
+	}
+
+	resp, err := m.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("github merge error: status %d", resp.StatusCode)
+	}
+	return nil
+}

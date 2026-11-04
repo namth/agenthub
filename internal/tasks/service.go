@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -16,6 +17,7 @@ var (
 	ErrInvalidTransition = errors.New("invalid status transition")
 	ErrValidation        = errors.New("validation error")
 	ErrGitHub            = errors.New("github error")
+	ErrNotConfigured     = errors.New("not configured")
 )
 
 type Task struct {
@@ -44,12 +46,26 @@ func WithOnCreated(fn func(Created)) Option {
 	}
 }
 
+func WithMerger(m Merger) Option {
+	return func(s *Service) {
+		s.merger = m
+	}
+}
+
+func WithOnMerged(fn func(prURL string)) Option {
+	return func(s *Service) {
+		s.onMerged = fn
+	}
+}
+
 type Service struct {
 	db        *sql.DB
 	gh        GitHub
 	disp      dispatcher.API
 	projectID string
 	onCreated func(Created)
+	merger    Merger
+	onMerged  func(string)
 }
 
 func NewService(db *sql.DB, gh GitHub, d dispatcher.API, projectID string, opts ...Option) *Service {
@@ -202,4 +218,72 @@ func (s *Service) Reject(ctx context.Context, taskID, reason string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) Merge(ctx context.Context, taskID string) error {
+	if s.merger == nil {
+		return ErrNotConfigured
+	}
+
+	var status string
+	var prURL sql.NullString
+	err := s.db.QueryRowContext(ctx, "SELECT status, pr_url FROM tasks WHERE id = ?", taskID).Scan(&status, &prURL)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("%w: task %s", ErrNotFound, taskID)
+	}
+	if err != nil {
+		return err
+	}
+
+	if status != "QA_PASSED" {
+		return fmt.Errorf("%w: task %s có trạng thái %s (chỉ merge khi QA_PASSED)", ErrInvalidTransition, taskID, status)
+	}
+
+	if !prURL.Valid || strings.TrimSpace(prURL.String) == "" {
+		return fmt.Errorf("%w: task %s không có pr_url", ErrValidation, taskID)
+	}
+
+	prNum, err := parsePRNumber(prURL.String)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrValidation, err)
+	}
+
+	if err := s.merger.MergePR(ctx, prNum); err != nil {
+		return fmt.Errorf("%w: %v", ErrGitHub, err)
+	}
+
+	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET status = 'DONE', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'QA_PASSED'", taskID)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("%w: task %s không ở trạng thái QA_PASSED", ErrInvalidTransition, taskID)
+	}
+
+	if s.onMerged != nil {
+		s.onMerged(prURL.String)
+	}
+
+	return nil
+}
+
+func parsePRNumber(rawURL string) (int, error) {
+	u := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	idx := strings.LastIndex(u, "/pull/")
+	if idx == -1 {
+		idx = strings.LastIndex(u, "/pulls/")
+		if idx == -1 {
+			return 0, fmt.Errorf("không tìm thấy /pull/<số> trong URL: %s", rawURL)
+		}
+		idx += len("/pulls/") - 1
+	} else {
+		idx += len("/pull/") - 1
+	}
+	part := u[idx+1:]
+	num, err := strconv.Atoi(part)
+	if err != nil {
+		return 0, fmt.Errorf("số PR không hợp lệ (%s): %w", part, err)
+	}
+	return num, nil
 }
