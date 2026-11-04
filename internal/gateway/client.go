@@ -95,6 +95,7 @@ type incomingEnvelope struct {
 	Chunk        string          `json:"chunk,omitempty"`
 	PrUrl        string          `json:"pr_url,omitempty"`
 	Branch       string          `json:"branch,omitempty"`
+	Result       json.RawMessage `json:"result,omitempty"`
 }
 
 type errorEnvelope struct {
@@ -249,17 +250,22 @@ func (c *clientConn) handleRequestTask(env incomingEnvelope) {
 		return
 	}
 
+	payload := map[string]any{
+		"task_id":      asg.TaskID,
+		"branch_name":  asg.BranchName,
+		"handoff_note": asg.HandoffNote,
+	}
+	if c.hub.promptFn != nil {
+		payload["prompt"] = c.hub.promptFn(*asg)
+	}
+
 	resp := map[string]any{
 		"event":         "ASSIGN_TASK",
 		"assignment_id": asg.ID,
 		"agent_id":      asg.AgentID,
 		"job_kind":      asg.JobKind,
 		"attempt":       asg.Attempt,
-		"payload": map[string]any{
-			"task_id":      asg.TaskID,
-			"branch_name":  asg.BranchName,
-			"handoff_note": asg.HandoffNote,
-		},
+		"payload":       payload,
 	}
 	b, _ := json.Marshal(resp)
 	c.send(b)
@@ -284,6 +290,9 @@ func (c *clientConn) handleTaskSubmitted(env incomingEnvelope) {
 	if err := c.hub.api.Submit(c.workerID, assignmentID); err != nil {
 		c.handleDomainError(err, env)
 		return
+	}
+	if c.hub.submitHook != nil {
+		c.hub.submitHook(c.workerID, assignmentID, env.PrUrl, env.Result)
 	}
 }
 
