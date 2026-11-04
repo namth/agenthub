@@ -1,13 +1,28 @@
 {
   "id": "TASK-021",
   "title": "Runner đa repo, phiên bản + tự cập nhật, lệnh --status",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "submitted",
+  "conversation_id": "852101cf-cf87-4c0b-9789-d0d5ea59c530",
   "history": [
     {
       "at": "2026-11-04T11:54:48",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T11:56:28",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T11:56:40",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:11:04",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
     }
   ],
   "locked_files": [
@@ -17,5 +32,6 @@
     "internal/runner/integration_test.go",
     "internal/runner/result_test.go",
     "internal/runner/exec_group_test.go"
-  ]
+  ],
+  "via": "agy"
 }
