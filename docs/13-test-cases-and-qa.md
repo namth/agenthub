@@ -79,3 +79,6 @@ Claude Code sẽ đánh giá PR dựa trên thang điểm 10 với checklist sau
 2. **Độ tin cậy & Test kèm theo (Weight: 30%):** Code mới có viết kèm Unit Test tương ứng không? Các trường hợp biên (null, empty, error) đã được xử lý chưa?
 3. **Bảo mật & Hiệu năng (Weight: 20%):** Có hardcode mật khẩu/token không? Truy vấn database có an toàn không? Có nguy cơ rò rỉ bộ nhớ (goroutine leak) không?
 4. **Độ sạch & Chú thích (Weight: 20%):** Code có dễ đọc không? Chú thích bằng tiếng Việt rõ ràng ở các hàm phức tạp.
+
+### 1.6 Đa dự án & thêm máy (FEAT-04, FEAT-05)
+TC-36 → TC-56: xem [features/multi-project.md](features/multi-project.md) §8 và [features/join-machine.md](features/join-machine.md) §8.

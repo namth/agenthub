@@ -127,3 +127,6 @@ Giao tiếp hai chiều thời gian thực giữa Go Orchestrator và Runner Cli
 * Runner → Server: `AGENT_EXHAUSTED`, `LEASE_RENEW`, `LEAD_RELEASE`, `LEAD_ACTION`.
 * Server → Runner: `HANDSHAKE_OK`, `LEASE_GRANTED`, `LEASE_REVOKED`, `ERROR` (`STALE_ASSIGNMENT`, `STALE_EPOCH`, `AGENT_NOT_OWNED`, `NOT_LEAD`).
 * Payload đầy đủ: [features/lead-rotation.md](features/lead-rotation.md) mục 6.1–6.2.
+
+## 3. API ĐA DỰ ÁN & MÁY (FEAT-04, FEAT-05)
+Chi tiết: [features/multi-project.md](features/multi-project.md) §6 và [features/join-machine.md](features/join-machine.md) §6. Gồm `GET /api/projects`, `GET /api/admin/github/repos`, `POST /api/admin/projects`, `PATCH /api/admin/projects/{id}`, `GET /api/tasks?project_id=`, `POST /api/fleet/join-codes`, `POST /api/fleet/join`, `GET /install.sh`, `GET /download/agenthub-{os}-{arch}`, `GET/PATCH/DELETE /api/my/machines/{id}`, `GET /api/contributions`, `GET /api/contributions/timeline`; WS `ASSIGN_TASK.payload.repo`, `HANDSHAKE.data.version`, `HANDSHAKE_OK.server_version`.

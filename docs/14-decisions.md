@@ -100,6 +100,48 @@
 - **Ngày:** 2026-11-04 · **Trạng thái:** CHỐT
 - **Quyết định:** SCR-06 hiển thị log bằng bộ tách màu SGR tự viết (`web/src/components/ansi.ts`) trong `<span data-color>`, giữ 5000 dòng mới nhất; không thêm thư viện xterm.js (nhẹ hơn, test được trong jsdom, không cần nhập liệu vào terminal). Cấm `dangerouslySetInnerHTML` cho log.
 
+## DEC-14: Thêm dự án bằng cách chọn từ danh sách repo mà PAT thấy; server tự tạo webhook
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-04 · **Trạng thái:** CHỐT
+- **Quyết định:** Giữ PAT fine-grained của server (cùng owner `namth`, cấp các repo cần dùng). Admin mở trang Dự án → server liệt kê repo PAT truy cập được → bấm Thêm. Server tự tạo webhook GitHub cho repo đó (PAT cần thêm quyền *Webhooks: Read and write*), dùng chung `GITHUB_WEBHOOK_SECRET`. Bỏ cặp env `GITHUB_REPO_OWNER/NAME` khỏi vai trò "repo duy nhất" (chỉ còn dùng để tạo dự án đầu tiên khi DB trống).
+- **Phương án loại:** GitHub App (chuẩn hơn cho nhiều owner nhưng phải làm lại OAuth/PAT), gõ tay owner/repo (dễ sai, quên webhook).
+
+## DEC-15: Một runner mỗi máy, tự clone repo theo job
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-04, FEAT-05 · **Trạng thái:** CHỐT
+- **Quyết định:** `ASSIGN_TASK` mang `repo` (`owner/name`). Runner giữ bản clone ở `~/.agenthub/repos/<owner>/<repo>`, tự clone khi gặp repo mới, worktree ở `~/.agenthub/worktrees/<repo>/<nhánh>`. Mỗi agent có danh sách dự án được nhận (NULL = mọi dự án), Admin chỉnh trên SCR-05. Bỏ cờ `--repo`.
+- **Phương án loại:** mỗi repo một runner (cùng CLI bị đếm thành nhiều agent, phá BR-17 và hạn mềm).
+
+## DEC-16: Chia việc công bằng giữa các dự án
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-04 · **Trạng thái:** CHỐT
+- **Quyết định:** Thứ tự chọn job cho agent rảnh: job `lead_only` (nếu là lead) → `priority` tăng dần → trong cùng priority, dự án có tỉ lệ `RUNNING / weight` nhỏ nhất → `created_at`. Bỏ qua dự án đã đạt `max_parallel` (NULL = không giới hạn) hoặc ngoài danh sách dự án của agent. `weight` 1–5 (mặc định 1), Admin chỉnh ở SCR-09.
+
+## DEC-17: Quản trị hệ thống = owner; vai trong dự án theo quyền trên từng repo
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-04 · **Trạng thái:** CHỐT · Mở rộng DEC-09
+- **Quyết định:** Quản trị hệ thống (SCR-05 Cụm máy, SCR-08, SCR-07, SCR-09 Dự án, trao/thu hồi lead) chỉ dành cho tài khoản GitHub trùng `GITHUB_OWNER`. Mỗi dự án: vai `ADMIN`/`PARTNER` tra quyền collaborator trên đúng repo đó theo DEC-09, làm mới khi đăng nhập và khi thêm dự án, lưu `project_members`. Không là collaborator → không thấy dự án. Sidebar có ô chọn dự án; Kanban/Tạo yêu cầu theo dự án đang chọn; quản trị hệ thống có thêm "Tất cả dự án".
+
+## DEC-18: Thêm máy bằng mã tham gia một lần + script cài + khối hướng dẫn cho agent local
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT
+- **Quyết định:**
+  - Quản trị hệ thống bấm "Thêm máy mới" (SCR-05) → nhập tên máy → server tạo **mã tham gia** dùng một lần, hết hạn 15 phút (chỉ lưu SHA-256).
+  - Trang hiện **hai thứ**: (1) lệnh một dòng `curl -fsSL <BASE_URL>/install.sh | sh -s -- --join <mã>`; (2) **khối hướng dẫn cho agent** (Markdown, nút Sao chép) để dán vào Claude Code / Antigravity đang chạy trên máy đó: mục tiêu, lệnh cài, cách kiểm kết quả, danh sách công cụ cần có và cách cài theo OS, ràng buộc an toàn (không in token, không dùng chế độ bỏ qua quyền, dừng lại nhờ người dùng ở mọi bước đăng nhập), và tiêu chí xong (máy ONLINE trên SCR-05).
+  - `install.sh`: nhận diện OS/CPU, tải binary từ server và kiểm SHA-256, đổi mã lấy `runner_token` (file 600), tự phát hiện agent có trên máy (`claude`, `agy`), cài dịch vụ tự chạy (LaunchAgent / systemd user), khởi động, rồi in bảng kiểm `git/gh/claude/agy/go/node` + trạng thái đăng nhập kèm lệnh cài đặt; **không tự cài phần mềm khác** (việc đó để agent local hoặc người dùng làm, có xác nhận).
+- **Phương án loại:** script tự cài mọi công cụ (rủi ro, dễ vỡ theo OS), chỉ in hướng dẫn (chậm, dễ sai).
+
+## DEC-19: Runner tự cập nhật khi rảnh
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT
+- **Quyết định:** `HANDSHAKE` gửi `version`, `HANDSHAKE_OK` trả `server_version`. Khác nhau → runner chờ mọi agent rảnh, tải `/download/agenthub-<os>-<arch>`, kiểm SHA-256, thay file rồi thoát để dịch vụ khởi động lại. SCR-05 hiện phiên bản từng máy. Cờ `--no-update` để tắt.
+
+## DEC-20: Máy có chủ sở hữu; partner tự thêm máy của mình
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT · Mở rộng DEC-18
+- **Quyết định:**
+  - `workers.owner_user_id` = người tạo mã tham gia. Mọi người dùng đã đăng nhập tạo được mã cho máy của chính mình.
+  - Partner có trang **SCR-11 Máy của tôi**: tạo mã, xem trạng thái/agent/dự án đang chạy, tạm dừng hoặc gỡ máy, chọn dự án máy được nhận — chỉ trong các dự án họ là thành viên (DEC-17).
+  - Quản trị hệ thống thấy mọi máy trên SCR-05, **nhóm theo chủ máy**, mỗi agent hiện dự án + task đang chạy.
+  - Agent trên máy của partner **không được giữ vai trưởng phòng** trừ khi quản trị bật `lead_eligible` cho agent đó (mặc định: máy của owner bật, máy partner tắt).
+
+## DEC-21: Trang Đóng góp tính từ dữ liệu sẵn có
+- **Ngày:** 2026-11-04 · **Tính năng:** FEAT-05 · **Trạng thái:** CHỐT
+- **Quyết định:** **SCR-10 Đóng góp** — lọc khoảng thời gian (7/30/90 ngày, tuỳ chọn), xem theo Partner (chủ máy) hoặc theo Dự án: số máy, job xong / lỗi / hết limit theo loại (SPEC/CODE/QA_REVIEW), task tạo và DONE, PR đã merge, giờ máy chạy việc (tổng `ended_at − started_at` của assignment). Bấm một dòng → dòng thời gian chi tiết (thời điểm, máy/agent, loại job, task, kết quả, attempt). Tính bằng truy vấn trên `assignments`, `jobs`, `tasks`, `workers` — không thêm bảng. Quản trị xem tất cả; partner chỉ xem phần của mình và các dự án mình là thành viên. Không ghi nhận token/chi phí (CLI không báo nhất quán).
+
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.
-- **FEAT-04 Đa dự án song song:** GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.
+- ~~**FEAT-04 Đa dự án song song:**~~ → đã grill, xem DEC-14 → DEC-17 và `docs/features/multi-project.md`. Ghi chú gốc: GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.

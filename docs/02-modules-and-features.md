@@ -73,3 +73,7 @@ Hệ thống phân biệt quyền hạn dựa trên vai trò ánh xạ từ GitH
    - Token được hash SHA-256 lưu trong bảng `workers` của SQLite.
 4. **Ánh xạ vai trò từ GitHub (DEC-09):** `admin`, `maintain` → `ADMIN`; `write`, `triage`, `read` → `PARTNER`.
 5. **Fencing:** bản tin của runner về một job phải mang `assignment_id` hiện hành; bản tin của lead phải mang `epoch` hiện hành (FEAT-01 BR-03, BR-04).
+
+## 4. ĐA DỰ ÁN & MÁY CỦA PARTNER (FEAT-04, FEAT-05)
+- Quản trị hệ thống = owner (`GITHUB_OWNER`); vai ADMIN/PARTNER tính **theo từng dự án** (`project_members`, DEC-17). Ma trận chi tiết: [features/multi-project.md](features/multi-project.md) §2, [features/join-machine.md](features/join-machine.md) §2.
+- Mọi người dùng tự thêm máy của mình (mã tham gia); máy có chủ (`workers.owner_user_id`); máy partner mặc định không làm trưởng phòng (DEC-20).

@@ -13,6 +13,9 @@
 | **SCR-05** | Quản Trị Cụm Máy (Fleet) | Chỉ Admin | `/fleet` | `src/pages/Fleet.tsx` | Danh sách máy và agent: Tên, OS, kết nối, từng agent (Claude/Antigravity) với trạng thái IDLE/BUSY/COOLDOWN + đếm ngược, thẻ Lead (epoch, gia hạn), nút Trao/Thu hồi vai, drawer sửa ưu tiên & hạn mềm, nút xem Log (FEAT-01). Design: SPEC_ONLY · Code: DONE |
 | **SCR-06** | Live Terminal Console | Chỉ Admin | `/fleet/:id/terminal` | `src/pages/LiveTerminal.tsx` | Màn hình đen giả lập terminal (xterm.js), hiển thị ANSI logs real-time từ máy con. |
 | **SCR-07** | Cài Đặt Hệ Thống | Chỉ Admin | `/settings` | `src/pages/Settings.tsx` | Cấu hình Telegram Bot Token, Chat ID, GitHub Repo kết nối; công tắc "Bật văn phòng ảo" (FEAT-02). |
+| **SCR-09** | Dự Án | Chỉ owner | `/projects` | `src/pages/Projects.tsx` | Danh sách dự án (repo, webhook, task mở, weight, max_parallel, lưu trữ) + repo chưa thêm (FEAT-04). Design: SPEC_ONLY · Code: TODO |
+| **SCR-10** | Đóng Góp | Mọi người dùng (theo quyền) | `/contributions` | `src/pages/Contributions.tsx` | Tổng hợp theo partner/dự án + dòng thời gian (FEAT-05, DEC-21). Design: SPEC_ONLY · Code: TODO |
+| **SCR-11** | Máy Của Tôi | Mọi người dùng | `/my/machines` | `src/pages/MyMachines.tsx` | Máy của mình, thêm máy (lệnh + hướng dẫn agent), tạm dừng/gỡ, chọn dự án (FEAT-05). Design: SPEC_ONLY · Code: TODO |
 | **SCR-08** | Văn Phòng Ảo | Chỉ Admin (khi bật) | `/office` | `src/pages/Office.tsx` | Văn phòng pixel-art chỉ quan sát: dãy bàn theo máy, ghế Trưởng phòng theo lead, phòng nghỉ cho COOLDOWN, hoạt cảnh giao/nộp/review/chuyển giao (FEAT-02). Design: SPEC_ONLY · Code: DONE |
 
 ---
@@ -57,3 +60,6 @@ Tất cả các màn hình trên AgentHub đều bắt buộc cài đặt 4 tr�
 * **Mô tả chi tiết:** Bắt buộc, hỗ trợ định dạng Markdown, tối thiểu 20 ký tự.
 * **Tên Máy con (Runner Name):** Chỉ gồm chữ cái, số và dấu gạch ngang (regex: `^[a-zA-Z0-9-]+$`).
 * **Ưu tiên lead:** số nguyên 1–99 hoặc để trống; chỉ agent Claude. **Hạn mềm:** `soft_max_jobs` 1–500 hoặc trống (tắt), `soft_window_hours` 1–24.
+
+## 5. ĐIỀU HƯỚNG ĐA DỰ ÁN (FEAT-04)
+Sidebar có ô chọn dự án; SCR-02/03/04 theo dự án đang chọn; mục quản trị (SCR-05, 07, 08, 09) chỉ owner thấy (DEC-17). SCR-05 nhóm máy theo chủ (DEC-20); hộp thoại "Thêm máy" dùng chung SCR-05 và SCR-11.

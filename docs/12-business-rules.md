@@ -57,3 +57,4 @@ stateDiagram-v2
    - Trước khi nhận task mới, Runner bắt buộc phải chạy lệnh kiểm tra dọn dẹp các thư mục worktree cũ để tránh rò rỉ dung lượng ổ cứng.
 4. **Quy tắc trưởng phòng trực & hết limit:** BR-01 → BR-18 ở [features/lead-rotation.md](features/lead-rotation.md) mục 7 (lease, epoch, chọn lead, trống lead, hạn mềm, cooldown, bàn giao WIP).
 5. **Quy tắc văn phòng ảo:** BR-19 → BR-23 ở [features/virtual-office.md](features/virtual-office.md) mục 7.
+6. **Đa dự án & máy của partner:** BR-24 → BR-36 ở [features/multi-project.md](features/multi-project.md) §7 và [features/join-machine.md](features/join-machine.md) §7.

@@ -162,3 +162,12 @@ DDL đầy đủ nằm ở [features/lead-rotation.md](features/lead-rotation.md
 
 ## 3. CHÍNH SÁCH DỌN DẸP DỮ LIỆU LOGS (LOG ROTATION)
 Bảng `task_logs` chỉ lưu giữ tối đa 5000 dòng log gần nhất cho mỗi task đang chạy. Sau khi task chuyển sang trạng thái `DONE`, các bản ghi log chi tiết sẽ được xuất nén thành file text lưu trữ cục bộ và xóa khỏi bảng SQLite để giữ cho file database luôn nhỏ gọn (< 50MB).
+
+## 4. DANH MỤC MIGRATION (từ FEAT-04)
+| Phiên bản | File | Nội dung |
+| :--- | :--- | :--- |
+| 001 | `internal/database/migrations/001_init.sql` | Schema ban đầu (TASK-001…018) |
+| 002 | `002_multi_project.sql` | `projects.weight/max_parallel/webhook_id`, `project_members`, `agent_projects` (FEAT-04 §5) |
+| 003 | `003_join_machine.sql` | `workers.owner_user_id/version/paused`, `agents.lead_eligible`, `join_codes` (FEAT-05 §5) |
+
+`database.Open` áp dụng migration chưa chạy theo `schema_migrations`; DB cũ chưa có bảng này được đánh dấu 001 trước.

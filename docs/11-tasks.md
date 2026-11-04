@@ -110,4 +110,6 @@
 
 **Trưởng phòng tự làm (ngoài handoff):** nối dây `cmd/server/main.go`; sự kiện `JOB_ASSIGNED/SUBMITTED`; giết cả nhóm tiến trình khi huỷ CLI; `Reconcile` bù job còn thiếu (30 giây/lần); nút Merge trên SCR-04; sửa route `/office`; test trọn dây chuyền `internal/e2e`.
 
+**Đợt FEAT-04/05 (2026-11-04):** TASK-019 migration + schema → TASK-020 backend dự án ∥ TASK-023 thêm máy → TASK-021 runner đa repo → TASK-022 UI dự án ∥ TASK-024 UI máy ∥ TASK-025 Đóng góp. DoD ở [features/multi-project.md](features/multi-project.md) §9, [features/join-machine.md](features/join-machine.md) §9.
+
 **Còn lại (nhỏ):** nhãn chữ trên canvas văn phòng ảo bị cắt, dãy bàn chưa ghi tên máy; Telegram chưa có nút Merge (chỉ web); chưa có dữ liệu thật trên GitHub/Telegram để chạy thử ngoài môi trường test.

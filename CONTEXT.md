@@ -69,4 +69,5 @@ agenthub/
 | FEAT-01 | Luân chuyển Trưởng phòng & chuyển giao khi hết limit | [features/lead-rotation.md](docs/features/lead-rotation.md) |
 | FEAT-02 | Văn phòng ảo (sơ đồ phối hợp trực quan) | [features/virtual-office.md](docs/features/virtual-office.md) |
 | FEAT-03 | Dây chuyền vai trò BA/Designer/Dev/Test | BACKLOG |
-| FEAT-04 | Đa dự án song song | BACKLOG |
+| FEAT-04 | Đa dự án song song | [features/multi-project.md](docs/features/multi-project.md) |
+| FEAT-05 | Thêm máy bằng một lệnh, máy của partner, trang Đóng góp | [features/join-machine.md](docs/features/join-machine.md) |
