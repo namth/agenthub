@@ -21,6 +21,7 @@ GITHUB_REPO_OWNER=your-org-or-username
 GITHUB_REPO_NAME=your-repo-name
 GITHUB_WEBHOOK_SECRET=your_github_webhook_hmac_secret
 GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_pat_for_api_calls
+GITHUB_API_URL=   # để trống = https://api.github.com; chỉ đặt khi dùng GitHub Enterprise hoặc chạy thử với GitHub giả
 
 # TELEGRAM BOT ALERTS
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ

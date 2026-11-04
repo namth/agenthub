@@ -668,7 +668,7 @@ func (r *Runner) runTask(
 
 		if branchName != "" && dir != "" {
 			diffStat = r.git.DiffStat(context.Background(), dir)
-			msg := fmt.Sprintf("wip(task-%s): attempt %d handoff [by Runner]", taskID, attempt)
+			msg := fmt.Sprintf("wip(task-%s): attempt %d handoff [by Runner]", taskRef(taskID, branchName), attempt)
 			sha, commitErr := r.git.CommitWIP(context.Background(), dir, msg)
 			if commitErr == nil && sha != "" {
 				if pushErr := r.git.Push(context.Background(), dir, branchName); pushErr == nil {
@@ -814,7 +814,7 @@ func (r *Runner) runTask(
 
 		var prURL string
 		if branchName != "" && dir != "" {
-			msg := fmt.Sprintf("feat(task-%s): %s attempt %d [by Runner]", taskID, jobKind, attempt)
+			msg := fmt.Sprintf("feat(task-%s): %s attempt %d [by Runner]", taskRef(taskID, branchName), jobKind, attempt)
 			_, _ = r.git.CommitWIP(context.Background(), dir, msg)
 			_ = r.git.Push(context.Background(), dir, branchName)
 
@@ -825,10 +825,10 @@ func (r *Runner) runTask(
 						summary = strings.TrimSpace(s)
 					}
 				}
-				title := fmt.Sprintf("feat(task-%s): %s", taskID, jobKind)
+				title := fmt.Sprintf("feat(task-%s): %s", taskRef(taskID, branchName), jobKind)
 				body := title
 				if summary != "" {
-					title = fmt.Sprintf("feat(task-%s): %s", taskID, summary)
+					title = fmt.Sprintf("feat(task-%s): %s", taskRef(taskID, branchName), summary)
 					body = summary
 				}
 				url, prErr := r.cfg.OpenPR(ctx, dir, branchName, title, body)
@@ -984,4 +984,12 @@ func (cw *chunkWriter) getLines() []string {
 	res := make([]string, len(cw.allLines))
 	copy(res, cw.allLines)
 	return res
+}
+
+// taskRef trả số issue theo quy ước docs/09 (nhánh feat/task-<số>), không có thì dùng mã task.
+func taskRef(taskID, branch string) string {
+	if ref, ok := strings.CutPrefix(branch, "feat/task-"); ok && ref != "" {
+		return ref
+	}
+	return taskID
 }

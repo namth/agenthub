@@ -519,7 +519,8 @@ func (p *Pipeline) OnMerged(ctx context.Context, prURL string) error {
 		return nil
 	}
 
-	rows, err := p.db.QueryContext(ctx, `SELECT id, parent_id FROM tasks WHERE pr_url = ? AND status = 'QA_PASSED'`, prURL)
+	// Gồm cả task đã DONE: Service.Merge chuyển DONE trước rồi mới báo, vẫn phải gộp lên task cha.
+	rows, err := p.db.QueryContext(ctx, `SELECT id, parent_id FROM tasks WHERE pr_url = ? AND status IN ('QA_PASSED', 'DONE')`, prURL)
 	if err != nil {
 		return fmt.Errorf("query task by pr_url: %w", err)
 	}
@@ -553,8 +554,8 @@ func (p *Pipeline) OnMerged(ctx context.Context, prURL string) error {
 		if err != nil {
 			return fmt.Errorf("update task DONE: %w", err)
 		}
-		affected, _ := res.RowsAffected()
-		if affected > 0 && t.parentID.Valid && t.parentID.String != "" {
+		_ = res
+		if t.parentID.Valid && t.parentID.String != "" {
 			if err := p.rollUpParent(ctx, t.parentID.String); err != nil {
 				return err
 			}

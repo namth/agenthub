@@ -84,6 +84,10 @@ export default function Office() {
         isInitialSnap.current
       );
       isInitialSnap.current = false;
+      // Vẽ ngay một khung: không chờ requestAnimationFrame (bị hoãn khi tab ở nền / vừa mở trang).
+      if (canvasRef.current) {
+        renderOffice(canvasRef.current, layout, officeState, animRef.current, Date.now());
+      }
     }
   }, [officeState, layout]);
 

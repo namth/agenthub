@@ -198,7 +198,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("project: %v", err)
 	}
-	gh := tasks.NewGitHubClient("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
+	gh := tasks.NewGitHubClient(os.Getenv("GITHUB_API_URL"), owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)
 
 	var hub *gateway.Hub
 	var pl *pipeline.Pipeline
@@ -243,6 +243,7 @@ func main() {
 		RepoOwner:    owner,
 		RepoName:     repo,
 		ServerToken:  os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"),
+		GitHubAPIURL: os.Getenv("GITHUB_API_URL"),
 	})
 	roleOf := func(r *http.Request) (string, bool) {
 		u, ok := auth.UserFrom(r.Context())
@@ -254,7 +255,7 @@ func main() {
 	}
 	fleetAPI := api.FleetHandler(db, disp, roleOf)
 	tasksSvc := tasks.NewService(db, gh, disp, projectID,
-		tasks.WithMerger(tasks.NewGitHubMerger("", owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)),
+		tasks.WithMerger(tasks.NewGitHubMerger(os.Getenv("GITHUB_API_URL"), owner, repo, os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"), nil)),
 		tasks.WithOnMerged(func(prURL string) {
 			if err := pl.OnMerged(context.Background(), prURL); err != nil {
 				log.Printf("pipeline merged: %v", err)
