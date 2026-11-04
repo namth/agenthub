@@ -1,7 +1,7 @@
 {
   "id": "TASK-029",
   "title": "Gateway: trao đổi phiên bản trong handshake, CloseWorker",
-  "status": "submitted",
+  "status": "accepted",
   "conversation_id": "fcec571a-80da-4b7d-b8bc-9ffbb962492d",
   "history": [
     {
@@ -23,6 +23,11 @@
       "at": "2026-11-04T14:33:36",
       "status": "submitted",
       "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T14:34:54",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
   ],
   "locked_files": [
