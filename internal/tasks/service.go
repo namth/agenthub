@@ -47,6 +47,15 @@ type ClarifyView struct {
 	CanAuto   bool           `json:"can_auto"`
 }
 
+type Proposal struct {
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`
+	Reason     string    `json:"reason"`
+	ProposedBy string    `json:"proposed_by"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type Task struct {
 	ID            string  `json:"id"`
 	ProjectID     string  `json:"project_id"`
@@ -956,6 +965,140 @@ func (s *Service) PickOption(ctx context.Context, userID, taskID string, round i
 	}
 
 	return true, nil
+}
+
+func (s *Service) DecideProposal(ctx context.Context, userID, role, taskID, proposalID string, accept bool) error {
+	var isAdmin bool
+	if role == "ADMIN" {
+		isAdmin = true
+	} else if s.isMulti {
+		var projectID string
+		err := s.db.QueryRowContext(ctx, `SELECT project_id FROM tasks WHERE id = ?`, taskID).Scan(&projectID)
+		if err == nil {
+			projRole, ok := s.UserRoleIn(userID, projectID)
+			if ok && projRole == "ADMIN" {
+				isAdmin = true
+			}
+		}
+	}
+	if !isAdmin {
+		return ErrForbidden
+	}
+
+	var status, propTaskID, proposedBy string
+	var epoch int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT status, task_id, proposed_by, epoch
+		FROM lead_proposals
+		WHERE id = ? AND task_id = ?
+	`, proposalID, taskID).Scan(&status, &propTaskID, &proposedBy, &epoch)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("query proposal: %w", err)
+	}
+
+	if status != "PENDING" {
+		return ErrInvalidTransition
+	}
+
+	if accept {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin tx: %w", err)
+		}
+		defer tx.Rollback()
+
+		res, err := tx.ExecContext(ctx, `
+			UPDATE lead_proposals
+			SET status = 'ACCEPTED', decided_by = ?, decided_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND status = 'PENDING'
+		`, userID, proposalID)
+		if err != nil {
+			return fmt.Errorf("update proposal: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return ErrInvalidTransition
+		}
+
+		// Update main task and any sub-tasks not DONE
+		_, err = tx.ExecContext(ctx, `
+			UPDATE tasks
+			SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP
+			WHERE (id = ? OR parent_id = ?) AND status <> 'DONE'
+		`, taskID, taskID)
+		if err != nil {
+			return fmt.Errorf("update tasks rejected: %w", err)
+		}
+
+		// Cancel queued jobs for them
+		_, err = tx.ExecContext(ctx, `
+			UPDATE jobs
+			SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP
+			WHERE status = 'QUEUED' AND (task_id = ? OR task_id IN (SELECT id FROM tasks WHERE parent_id = ?))
+		`, taskID, taskID)
+		if err != nil {
+			return fmt.Errorf("cancel jobs: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit tx: %w", err)
+		}
+
+		// Close GitHub issue for task and non-DONE subtasks
+		var taskProjID string
+		var taskIssueID sql.NullInt64
+		_ = s.db.QueryRowContext(ctx, `SELECT project_id, github_issue_id FROM tasks WHERE id = ?`, taskID).Scan(&taskProjID, &taskIssueID)
+
+		gh, err := s.githubFor(taskProjID)
+		if err == nil && gh != nil {
+			if taskIssueID.Valid && taskIssueID.Int64 > 0 {
+				_ = gh.CloseIssue(ctx, int(taskIssueID.Int64), "Đề xuất huỷ đã được chấp thuận")
+			}
+			sRows, err := s.db.QueryContext(ctx, `SELECT github_issue_id FROM tasks WHERE parent_id = ? AND status = 'REJECTED'`, taskID)
+			if err == nil {
+				defer sRows.Close()
+				for sRows.Next() {
+					var subIssue sql.NullInt64
+					if err := sRows.Scan(&subIssue); err == nil && subIssue.Valid && subIssue.Int64 > 0 {
+						_ = gh.CloseIssue(ctx, int(subIssue.Int64), "Đề xuất huỷ đã được chấp thuận")
+					}
+				}
+			}
+		}
+
+		return nil
+	}
+
+	// Reject proposal
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE lead_proposals
+		SET status = 'REJECTED', decided_by = ?, decided_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND status = 'PENDING'
+	`, userID, proposalID)
+	if err != nil {
+		return fmt.Errorf("update proposal: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrInvalidTransition
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO lead_journal (epoch, agent_id, task_id, kind, entry)
+		VALUES (?, ?, ?, 'DECISION', 'Admin từ chối huỷ')
+	`, epoch, userID, taskID)
+	if err != nil {
+		return fmt.Errorf("insert lead_journal: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func ParseAnswerComment(body string) (map[string]string, bool) {

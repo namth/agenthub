@@ -13,6 +13,15 @@ export interface Subtask {
   pr_url?: string | null;
 }
 
+export interface ProposalData {
+  id: string;
+  kind: string;
+  reason: string;
+  proposed_by: string;
+  status: string;
+  created_at?: string;
+}
+
 export interface TaskDetailData {
   id: string;
   title: string;
@@ -23,6 +32,7 @@ export interface TaskDetailData {
   parent_id?: string | null;
   created_at?: string;
   subtasks?: Subtask[];
+  proposals?: ProposalData[];
 }
 
 export interface TaskDetailProps {
@@ -167,6 +177,46 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
     }
   };
 
+  const handleAcceptProposal = async (pid: string) => {
+    if (!id || acting || !window.confirm('Xác nhận đồng ý huỷ tác vụ này?')) return;
+    setActing(true);
+    setActionError(null);
+    try {
+      await api.post(`/api/tasks/${id}/proposals/${pid}/accept`);
+      await fetchTask();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Không thể đồng ý huỷ task');
+      }
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleRejectProposal = async (pid: string) => {
+    if (!id || acting) return;
+    setActing(true);
+    setActionError(null);
+    try {
+      await api.post(`/api/tasks/${id}/proposals/${pid}/reject`);
+      await fetchTask();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setActionError(err.message || err.code);
+      } else if (err instanceof Error) {
+        setActionError(err.message);
+      } else {
+        setActionError('Không thể từ chối đề xuất');
+      }
+    } finally {
+      setActing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -201,6 +251,7 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
 
   const canApproveOrReject = role === 'ADMIN' && task.status === 'PENDING_APPROVAL';
   const canMerge = role === 'ADMIN' && task.status === 'QA_PASSED' && !!task.pr_url;
+  const pendingProposal = task.proposals?.find((p) => p.status === 'PENDING');
 
   return (
     <div className="space-y-6">
@@ -255,6 +306,39 @@ export default function TaskDetail({ role = 'PARTNER' }: TaskDetailProps = {}) {
       </div>
 
       {actionError && <ErrorBanner message={actionError} onRetry={() => setActionError(null)} />}
+
+      {pendingProposal && (
+        <div
+          data-testid="lead-proposal"
+          className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-medium">
+              Trưởng phòng đề xuất huỷ: {pendingProposal.reason}
+            </span>
+          </div>
+          {role === 'ADMIN' && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleAcceptProposal(pendingProposal.id)}
+                disabled={acting}
+                className="min-h-9 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
+              >
+                Đồng ý huỷ
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRejectProposal(pendingProposal.id)}
+                disabled={acting}
+                className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 disabled:opacity-50"
+              >
+                Từ chối
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {clarifications && clarifications.rounds && clarifications.rounds.length > 0 && (
         <ClarifyPanel

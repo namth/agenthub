@@ -306,3 +306,34 @@ func (n *Notifier) NotifyClarifyCapped(taskID, title string) {
 		text:   text,
 	})
 }
+
+// NotifyProposal gửi thông báo đề xuất huỷ của trưởng phòng tới admin chat kèm nút Đồng ý huỷ và Từ chối.
+func (n *Notifier) NotifyProposal(taskID, title, proposalID, reason string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⚠️ TRƯỞNG PHÒNG ĐỀ XUẤT HUỶ\nTask: %s\nLý do: %s", title, reason)
+	buttons := [][]Button{
+		{
+			{Text: "Đồng ý huỷ", CallbackData: fmt.Sprintf("proposal_accept:%s:%s", taskID, proposalID)},
+			{Text: "Từ chối", CallbackData: fmt.Sprintf("proposal_reject:%s:%s", taskID, proposalID)},
+		},
+	}
+	n.enqueue(notifyItem{
+		chatID:  n.adminChatID,
+		text:    text,
+		buttons: buttons,
+	})
+}
+
+// NotifyReplanInvalid gửi thông báo khi kết quả REPLAN từ trưởng phòng không hợp lệ.
+func (n *Notifier) NotifyReplanInvalid(taskID, title string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⚠️ KẾ HOẠCH KHÔNG HỢP LỆ\nTask: %s\nKết quả REPLAN từ trưởng phòng không hợp lệ.", title)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}

@@ -265,7 +265,14 @@ func (b *serverMCPBackend) MergeTask(ctx context.Context, userID, id string) (ma
 }
 
 func (b *serverMCPBackend) DecideProposal(ctx context.Context, userID, taskID, proposalID string, accept bool) (map[string]any, error) {
-	return nil, errors.New("chưa hỗ trợ")
+	if err := b.tasksSvc.DecideProposal(ctx, userID, "ADMIN", taskID, proposalID, accept); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"task_id":     taskID,
+		"proposal_id": proposalID,
+		"accepted":    accept,
+	}, nil
 }
 
 func (b *serverMCPBackend) FleetStatus(ctx context.Context, userID string) (map[string]any, error) {
