@@ -67,3 +67,4 @@ stateDiagram-v2
 8. **Phỏng vấn làm rõ & kỹ năng dùng chung:** BR-47 → BR-55 ở [features/clarification-and-shared-skills.md](features/clarification-and-shared-skills.md) §7 (BR-50, BR-52 đã sửa theo DEC-32/33).
 9. **Vận hành thật & đa partner:** BR-56 → BR-60 ở [features/ops-readiness.md](features/ops-readiness.md) §7. BR-58 bổ sung điều kiện nhận việc của BR-37.
 10. **Điều hành mọi nơi:** BR-61 → BR-65 ở [features/remote-command.md](features/remote-command.md) §7. BR-64 thay hành vi REPLAN/UNBLOCK cũ (kết quả bị bỏ qua).
+11. **Tài khoản agent linh động:** BR-66 → BR-70 ở [features/agent-accounts.md](features/agent-accounts.md) §7. BR-68 bổ sung điều kiện nhận việc (`ever_ok`, chưa xoá).

@@ -186,6 +186,7 @@ Bảng `task_logs` chỉ lưu giữ tối đa 5000 dòng log gần nhất cho m�
 | 002 | `002_multi_project.sql` | `projects.weight/max_parallel/webhook_id`, `project_members`, `agent_projects` (FEAT-04 §5) |
 | 003 | `003_join_machine.sql` | `workers.owner_user_id/version/paused`, `agents.lead_eligible`, `join_codes` (FEAT-05 §5) |
 | 005 | `005_ops_remote.sql` | Dựng lại `tasks` để thêm `WAITING_USER`; `task_clarifications`; `projects.allowed_commands/needs_ci_for_integration/is_sandbox`; `smoke_runs`; `personal_tokens`; `lead_proposals` (FEAT-07 §5, FEAT-09 §5, FEAT-10 §5) |
+| 006 | `006_agent_accounts.sql` | Dựng lại `agents`: thêm `name`, `ever_ok`, `removed_at`; `UNIQUE(worker_id, kind)` → `UNIQUE(worker_id, name)` (FEAT-11 §5) |
 | 004 | `004_agent_auth_office.sql` | `agents.auth_status/auth_checked_at/auth_detail`, `workers.gh_auth`, `users.last_seen_at`, đặt `lead_eligible = 0` cho agent không phải Claude (FEAT-06 §5, FEAT-02 bản 2 §5) |
 
 `database.Open` áp dụng migration chưa chạy theo `schema_migrations`; DB cũ chưa có bảng này được đánh dấu 001 trước.

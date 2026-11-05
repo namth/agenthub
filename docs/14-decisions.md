@@ -240,6 +240,26 @@
 - **Ngày:** 2026-11-04 · **Tính năng:** FEAT-10 · **Trạng thái:** CHỐT · Sửa DEC-12 (REPLAN/UNBLOCK có schema kết quả)
 - **Quyết định:** Màn chính dùng được ở 375px. `result.json` của REPLAN/UNBLOCK: `retry` | `replan` | `ask_user` | `cancel` (cancel chờ Admin xác nhận qua `lead_proposals`).
 
+## DEC-41: Agent = một tài khoản CLI; một máy có nhiều agent cùng loại
+- **Ngày:** 2026-11-05 · **Tính năng:** FEAT-11 · **Trạng thái:** CHỐT · Sửa ràng buộc `UNIQUE(worker_id, kind)` (FEAT-01)
+- **Bối cảnh:** có máy chỉ có một loại CLI nhưng nhiều tài khoản; id cố định `<máy>/<kind>` chỉ cho 1 tài khoản/loại.
+- **Quyết định:** id `<máy>/<name>`; thêm tài khoản bằng lệnh tại máy `agenthub account add <claude|antigravity>` (thư mục cấu hình riêng: `CLAUDE_CONFIG_DIR`, `HOME` cho agy), lưu ở `~/.agenthub/agents.json`. Mỗi agent một slot, hạn mức riêng.
+- **Phương án loại:** nút thêm trên web (vẫn phải đăng nhập tại máy, thêm bước); cài nhiều runner trên một máy (tốn tài nguyên, văn phòng hiện như nhiều máy).
+
+## DEC-42: Agent chỉ hiện sau lần đăng nhập OK đầu tiên
+- **Ngày:** 2026-11-05 · **Tính năng:** FEAT-11 · **Trạng thái:** CHỐT · Sửa FEAT-06 (agent cài CLI nhưng chưa có tài khoản không còn hiện `NEEDS_AUTH`)
+- **Quyết định:** cờ `ever_ok` (runner và server); runner chỉ báo agent `ever_ok`; server ẩn và không giao việc cho agent `ever_ok = 0`. `NEEDS_AUTH` đỏ chỉ dành cho agent từng OK rồi mất phiên.
+- **Phương án loại:** hiện dòng xám "chưa đăng nhập" ở trang máy.
+
+## DEC-43: Owner và chủ máy xoá agent trên web
+- **Ngày:** 2026-11-05 · **Tính năng:** FEAT-11 · **Trạng thái:** CHỐT
+- **Quyết định:** `DELETE /api/admin/agents/{id}` (owner mọi máy), `DELETE /api/my/machines/{id}/agents/{name}` (chủ máy); agent đang chạy việc → `409`. Server giữ tombstone `removed_at` và gửi `AGENT_REMOVE` để runner gỡ khỏi `agents.json`, nên không tự đăng ký lại; thêm lại thì `account add` sinh tên mới.
+- **Phương án loại:** chỉ owner được xoá.
+
+## DEC-44: Văn phòng ảo bản 3 — chỉ vẽ agent có thật, trưởng phòng quay mặt ra, phòng nghỉ có giường
+- **Ngày:** 2026-11-05 · **Tính năng:** FEAT-02 bản 3 · **Trạng thái:** CHỐT · **Thay phần "tối thiểu 8 chỗ, ghế trống vẫn vẽ" của DEC-25**
+- **Quyết định:** chỉ vẽ bàn cho agent đang có; chữ vẽ theo `devicePixelRatio` cho nét; bàn trưởng phòng đặt trên cùng, nhân vật quay mặt về phía người xem, đối diện các bàn nhân viên (nhân viên quay lưng về người xem, nhìn vào màn hình); tường sau: giữa là cửa sổ kính, logo INOVA chuyển sang mảng tường bên phải; mỗi chỗ ngồi gồm bàn gọn + màn hình + ghế; khu chỉ huy giãn cách bàn owner/partner; phòng nghỉ có giường, agent `COOLDOWN` nằm ngủ kèm đồng hồ đếm ngược.
+
 ## BACKLOG (chưa grill)
 - **FEAT-03 Dây chuyền vai trò** (BA / Designer / Dev / Test): vai trò là loại job (`SPEC`, `DESIGN`, `TEST_WRITE`, `CODE`, `QA_REVIEW`), mẫu dây chuyền theo loại task, bảng ánh xạ vai trò → loại agent cấu hình được. Schema `jobs.kind` đã dành sẵn.
 - ~~**FEAT-04 Đa dự án song song:**~~ → đã grill, xem DEC-14 → DEC-17 và `docs/features/multi-project.md`. Ghi chú gốc: GitHub App thay PAT, `project_members` (RBAC theo dự án), runner giữ clone theo repo, dispatcher chia lượt có trọng số + giới hạn đồng thời mỗi dự án, secrets/CI theo dự án; một lead trực toàn hệ thống. Cột `jobs.project_id` đã có. Gộp luôn việc thu hẹp scope OAuth của người dùng về `read:user`.

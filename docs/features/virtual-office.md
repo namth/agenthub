@@ -1,7 +1,7 @@
 # FEAT-02: Văn phòng ảo (Sơ đồ phối hợp trực quan)
 
-> Trạng thái: **Bản 2 — DONE (2026-11-04)** · Bản 1 DONE (2026-11-04).
-> Quyết định: DEC-07 (phần bố cục thay bởi DEC-25), DEC-08, DEC-24, DEC-25, DEC-26, DEC-27, DEC-28 (`docs/14-decisions.md`).
+> Trạng thái: **Bản 3 — SPEC_APPROVED (2026-11-05)** · Bản 2 DONE (2026-11-04) · Bản 1 DONE (2026-11-04).
+> Quyết định: DEC-07 (phần bố cục thay bởi DEC-25), DEC-08, DEC-24, DEC-25 (phần "tối thiểu 8 chỗ" thay bởi DEC-44), DEC-26, DEC-27, DEC-28, DEC-44 (`docs/14-decisions.md`).
 > Nguồn tham khảo phong cách: `namth/edusystem`, nhánh `claude/office-simulation-gui-ca46c2`, thư mục `office/` — bản chép ở `web/src/office/legacy/` (sàn gỗ, tường, vách kính, bảng công việc, cây xanh, đồng hồ).
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
@@ -212,3 +212,19 @@ data: {"ts":"2026-11-04T09:02:11Z","who":"user:partner-a","type":"presence","tex
 | **TASK-035** | Bản 2 | `web/src/office/model.ts` (`computeLayout` bản 2: khu làm việc BR-43, khu chỉ huy BR-44, đáy phòng nghỉ/sảnh), `renderer.ts` (nội thất theo bản tham khảo legacy: sàn gỗ, tường, vách/cửa kính, bảng tin, cây, đồng hồ; nhân vật người dùng; 🔑 BR-45), lớp DOM logo (BR-46), `Office.tsx` (route/stream mới, thanh dưới, 4 trạng thái); sidebar hiện "Văn phòng" cho partner khi bật | `cd web && npx vitest run src/office` qua TC-33 → TC-35, TC-71 → TC-73; `npm run typecheck && npm run build`; ảnh chụp màn hình 0/3/9 máy gửi kèm bản nộp |
 
 Thứ tự: TASK-030 (migration) → TASK-033 → TASK-035.
+
+## 10. Bản 3 (2026-11-05, DEC-44) — chỉnh theo góp ý chạy thật
+
+Thay §4.1 ở các điểm dưới; phần còn lại giữ nguyên.
+
+| Hạng mục | Bản 2 | Bản 3 |
+| :--- | :--- | :--- |
+| Số bàn | tối thiểu 8, ghế trống vẫn vẽ | **chỉ agent đang có** (FEAT-11: `ever_ok`, chưa xoá); không có agent → khu làm việc trống + thông điệp Empty |
+| Chữ | vẽ ở độ phân giải logic 480 px rồi phóng to → mờ | canvas nhân `devicePixelRatio` (tối thiểu 2), chữ vẽ ở độ phân giải thật, cỡ ≥ 7 px logic, có viền/nền tương phản |
+| Bàn trưởng phòng ★ | sát tường, nhân vật quay lưng | trên cùng giữa, **nhân vật quay mặt về phía người xem**, màn hình quay lưng về người xem; đối diện các bàn nhân viên |
+| Bàn nhân viên | bàn to, không ghế | mỗi chỗ: bàn gọn + màn hình phía trên + **ghế phía dưới**; nhân vật **quay lưng về người xem**, nhìn vào màn hình |
+| Tường sau | logo INOVA ở giữa | **giữa là cửa sổ kính** (khung, ô kính, ánh sáng); logo INOVA trên **mảng tường bên phải** của khu làm việc |
+| Khu chỉ huy | bàn owner/partner dính sát nhau | mỗi người một bàn gọn (bàn + màn hình + ghế), **cách nhau ≥ 1 ô**, biển tên rõ, chấm online |
+| Phòng nghỉ | ☕ + đồng hồ | **2–4 giường**; agent `COOLDOWN` **nằm ngủ trên giường** (💤) kèm đồng hồ đếm ngược; nhiều hơn số giường → ngồi sofa |
+
+**Kiểm thử bản 3** (`web/src/office/office_v3.test.tsx`): bố cục không sinh bàn trống; 3 agent CLAUDE cùng một máy → 3 bàn; agent COOLDOWN có vị trí giường trong `breakRoom`; khu chỉ huy 3 người → các bàn không chồng nhau và cách nhau ≥ 8 px logic; logo nằm bên phải cửa sổ kính; canvas có kích thước thật = logic × `devicePixelRatio`. Hình thức kiểm bằng ảnh chụp thật trên `agent.oa.io.vn/office`.

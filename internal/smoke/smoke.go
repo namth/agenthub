@@ -220,7 +220,7 @@ func (s *Smoke) Track(ctx context.Context) error {
 				SET status = 'TIMEOUT', steps = ?, ended_at = ?
 				WHERE id = ?
 			`, string(stepsJSON), now.Format(time.RFC3339), ar.id)
-			_ = s.ops.Cleanup(ctx, ar.taskID)
+			s.finish(ctx, ar.taskID)
 			continue
 		}
 
@@ -302,7 +302,7 @@ func (s *Smoke) Track(ctx context.Context) error {
 				SET status = 'FAILED', steps = ?, ended_at = ?
 				WHERE id = ?
 			`, string(stepsJSON), now.Format(time.RFC3339), ar.id)
-			_ = s.ops.Cleanup(ctx, ar.taskID)
+			s.finish(ctx, ar.taskID)
 			continue
 		}
 
@@ -434,7 +434,7 @@ func (s *Smoke) Track(ctx context.Context) error {
 				SET status = 'PASSED', steps = ?, ended_at = ?
 				WHERE id = ?
 			`, string(stepsJSON), now.Format(time.RFC3339), ar.id)
-			_ = s.ops.Cleanup(ctx, ar.taskID)
+			s.finish(ctx, ar.taskID)
 			continue
 		}
 
@@ -665,4 +665,21 @@ func Handler(s *Smoke, authz func(*http.Request) (userID, role string, ok bool))
 	}
 
 	return r
+}
+
+// finish dọn lần chạy đã kết thúc (PASSED/FAILED/TIMEOUT): huỷ job còn QUEUED,
+// đóng task gốc + sub-task chưa DONE (REJECTED), rồi đóng issue/PR mẫu trên GitHub.
+// Job đang RUNNING để nguyên (server không dừng được runner); nếu nó nộp sau đó,
+// pipeline chưa chặn job mới cho task REJECTED — giới hạn đã ghi ở BR-60.
+func (s *Smoke) finish(ctx context.Context, rootID string) {
+	_, _ = s.db.ExecContext(ctx, `
+		UPDATE jobs SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP
+		WHERE status = 'QUEUED'
+		  AND task_id IN (SELECT id FROM tasks WHERE id = ? OR parent_id = ?)
+	`, rootID, rootID)
+	_, _ = s.db.ExecContext(ctx, `
+		UPDATE tasks SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP
+		WHERE status <> 'DONE' AND (id = ? OR parent_id = ?)
+	`, rootID, rootID)
+	_ = s.ops.Cleanup(ctx, rootID)
 }

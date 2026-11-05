@@ -1,0 +1,13 @@
+{
+  "id": "TASK-050",
+  "title": "Runner: agents.json + agenthub account add/remove/list/login",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-05T14:54:35",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ]
+}

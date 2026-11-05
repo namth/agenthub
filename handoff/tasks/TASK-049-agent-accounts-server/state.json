@@ -1,0 +1,13 @@
+{
+  "id": "TASK-049",
+  "title": "Server: tài khoản agent linh động (migration 006, HELLO name/ever_ok, xoá agent)",
+  "status": "draft",
+  "conversation_id": null,
+  "history": [
+    {
+      "at": "2026-11-05T14:54:35",
+      "status": "draft",
+      "note": "Claude tạo task"
+    }
+  ]
+}

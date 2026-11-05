@@ -71,6 +71,7 @@ Hệ thống phân biệt quyền hạn dựa trên vai trò ánh xạ từ GitH
 | **Nhận việc của dự án (máy của mình)** | mọi dự án | ✅ chỉ dự án mình là thành viên | ✅ | FEAT-09, DEC-37 |
 | **Lệnh Telegram, token cá nhân, MCP `/mcp`** | ✅ owner | ❌ | ❌ | FEAT-10, DEC-39 |
 | **Xác nhận đề xuất huỷ của trưởng phòng AI** | ✅ | ❌ | ❌ | FEAT-10 (ADMIN dự án cũng được) |
+| **Xoá tài khoản agent khỏi hub** | ✅ mọi máy | ✅ máy của mình | ❌ | FEAT-11, DEC-43 |
 
 ---
 
