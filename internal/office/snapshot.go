@@ -3,6 +3,7 @@ package office
 import (
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/namth/agenthub/internal/dispatcher"
@@ -17,6 +18,7 @@ type AgentJob struct {
 // AgentSnapshot chứa ảnh chụp trạng thái của một agent.
 type AgentSnapshot struct {
 	ID            string    `json:"id"`
+	Name          string    `json:"name"`
 	Kind          string    `json:"kind"`
 	Status        string    `json:"status"`
 	AuthStatus    string    `json:"auth_status"`
@@ -114,8 +116,9 @@ func BuildSnapshot(db *sql.DB, lead dispatcher.Lease, p *Presence) (map[string]a
 	}
 
 	agentRows, err := db.Query(`
-		SELECT id, worker_id, kind, status, COALESCE(auth_status, 'UNKNOWN'), cooldown_until
+		SELECT id, worker_id, name, kind, status, COALESCE(auth_status, 'UNKNOWN'), cooldown_until
 		FROM agents
+		WHERE ever_ok = 1 AND removed_at IS NULL
 		ORDER BY id ASC
 	`)
 	if err != nil {
@@ -125,9 +128,16 @@ func BuildSnapshot(db *sql.DB, lead dispatcher.Lease, p *Presence) (map[string]a
 
 	for agentRows.Next() {
 		var id, workerID, kind, status, authStatus string
-		var cu sql.NullString
-		if err := agentRows.Scan(&id, &workerID, &kind, &status, &authStatus, &cu); err != nil {
+		var nameVal, cu sql.NullString
+		if err := agentRows.Scan(&id, &workerID, &nameVal, &kind, &status, &authStatus, &cu); err != nil {
 			return nil, err
+		}
+		name := nameVal.String
+		if name == "" {
+			idx := strings.Index(id, "/")
+			if idx >= 0 && idx+1 < len(id) {
+				name = id[idx+1:]
+			}
 		}
 		if authStatus == "" {
 			authStatus = "UNKNOWN"
@@ -141,6 +151,7 @@ func BuildSnapshot(db *sql.DB, lead dispatcher.Lease, p *Presence) (map[string]a
 		}
 		as := AgentSnapshot{
 			ID:            id,
+			Name:          name,
 			Kind:          kind,
 			Status:        status,
 			AuthStatus:    authStatus,

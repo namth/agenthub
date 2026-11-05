@@ -218,7 +218,7 @@ func TestConstraintsRejectInvalid(t *testing.T) {
 		{"agents.lead_priority>99", `INSERT INTO agents (id, worker_id, kind, lead_priority) VALUES ('mac-mini/antigravity', 'mac-mini', 'ANTIGRAVITY', 100)`},
 		{"agents.soft_max_jobs>500", `INSERT INTO agents (id, worker_id, kind, soft_max_jobs) VALUES ('mac-mini/antigravity', 'mac-mini', 'ANTIGRAVITY', 501)`},
 		{"agents.soft_window_hours>24", `INSERT INTO agents (id, worker_id, kind, soft_window_hours) VALUES ('mac-mini/antigravity', 'mac-mini', 'ANTIGRAVITY', 25)`},
-		{"agents UNIQUE(worker_id, kind)", `INSERT INTO agents (id, worker_id, kind) VALUES ('mac-mini/claude-2', 'mac-mini', 'CLAUDE')`},
+		{"agents UNIQUE(worker_id, name)", `INSERT INTO agents (id, worker_id, kind, name) VALUES ('mac-mini/khac', 'mac-mini', 'CLAUDE', 'claude')`}, // DEC-41: bỏ UNIQUE(worker_id, kind)
 		{"tasks.status", `INSERT INTO tasks (id, project_id, title, description, created_by, status) VALUES ('t2', 'p1', 'x', 'y', 'u1', 'FOO')`},
 		{"jobs.kind", `INSERT INTO jobs (id, project_id, task_id, kind, required_agent) VALUES ('j2', 'p1', 't1', 'DEPLOY', 'CLAUDE')`},
 		{"jobs.required_agent", `INSERT INTO jobs (id, project_id, task_id, kind, required_agent) VALUES ('j2', 'p1', 't1', 'CODE', 'GEMINI')`},

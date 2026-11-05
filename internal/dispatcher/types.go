@@ -20,6 +20,7 @@ var (
 	ErrNoLead           = errors.New("NO_LEAD")            // Admin thu hồi khi VACANT
 	ErrNotFound         = errors.New("NOT_FOUND")
 	ErrInvalidAuth      = errors.New("VALIDATION_ERROR")
+	ErrConflict         = errors.New("CONFLICT")
 )
 
 // Clock cho phép test dùng đồng hồ giả.
@@ -80,12 +81,15 @@ const (
 
 type AgentHello struct {
 	Kind       string
+	Name       string
 	AuthStatus string
 	AuthDetail string
+	EverOK     *bool
 }
 
 type Agent struct {
 	ID            string // "<worker_id>/<kind thường>", vd "mac-mini/claude"
+	Name          string
 	WorkerID      string
 	Kind          string
 	Status        string // IDLE | BUSY | COOLDOWN
@@ -156,6 +160,7 @@ const (
 	EvJobSubmitted  = "JOB_SUBMITTED"  // AgentID, AssignmentID, JobID
 	EvAgentAuth     = "AGENT_AUTH"
 	EvWorkerAuth    = "WORKER_AUTH"
+	EvAgentRemoved  = "AGENT_REMOVED" // WorkerID, AgentID
 )
 
 // Notifier nhận sự kiện; cài đặt không được chặn lâu (gateway tự đệm).

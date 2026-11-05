@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -219,8 +220,10 @@ type handshakeData struct {
 	GhAuth  string `json:"gh_auth"`
 	Agents  []struct {
 		Kind       string `json:"kind"`
+		Name       string `json:"name"`
 		AuthStatus string `json:"auth_status"`
 		AuthDetail string `json:"auth_detail"`
+		EverOK     *bool  `json:"ever_ok"`
 	} `json:"agents"`
 }
 
@@ -233,14 +236,22 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 	var agents []dispatcher.Agent
 	var err error
 
+	reportedIDs := make([]string, 0, len(d.Agents))
 	if authAPI, ok := c.hub.api.(dispatcher.AuthAPI); ok {
 		hellos := make([]dispatcher.AgentHello, 0, len(d.Agents))
 		for _, a := range d.Agents {
 			if a.Kind != "" {
+				name := a.Name
+				if name == "" {
+					name = strings.ToLower(a.Kind)
+				}
+				reportedIDs = append(reportedIDs, c.workerID+"/"+name)
 				hellos = append(hellos, dispatcher.AgentHello{
 					Kind:       a.Kind,
+					Name:       a.Name,
 					AuthStatus: a.AuthStatus,
 					AuthDetail: a.AuthDetail,
+					EverOK:     a.EverOK,
 				})
 			}
 		}
@@ -249,6 +260,11 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 		kinds := make([]string, 0, len(d.Agents))
 		for _, a := range d.Agents {
 			if a.Kind != "" {
+				name := a.Name
+				if name == "" {
+					name = strings.ToLower(a.Kind)
+				}
+				reportedIDs = append(reportedIDs, c.workerID+"/"+name)
 				kinds = append(kinds, a.Kind)
 			}
 		}
@@ -257,6 +273,19 @@ func (c *clientConn) handleHandshake(env incomingEnvelope) {
 	if err != nil {
 		c.handleDomainError(err, env)
 		return
+	}
+
+	type tombstoner interface {
+		Tombstoned(workerID string, ids []string) []string
+	}
+	if tb, ok := c.hub.api.(tombstoner); ok {
+		for _, id := range tb.Tombstoned(c.workerID, reportedIDs) {
+			msg, _ := json.Marshal(map[string]any{
+				"event":    "AGENT_REMOVE",
+				"agent_id": id,
+			})
+			c.send(msg)
+		}
 	}
 
 	c.handshaken = true
