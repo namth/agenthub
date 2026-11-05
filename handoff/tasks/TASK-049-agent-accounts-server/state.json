@@ -9,5 +9,14 @@
       "status": "draft",
       "note": "Claude tạo task"
     }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-049-agent-accounts-server/verify.sh",
+    "internal/database/migrate006_test.go",
+    "internal/dispatcher/accounts_test.go",
+    "internal/api/fleet_accounts_test.go",
+    "internal/machines/accounts_test.go",
+    "internal/gateway/accounts_test.go",
+    "internal/office/accounts_test.go"
   ]
 }
