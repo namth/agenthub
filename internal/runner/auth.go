@@ -202,6 +202,10 @@ func (r *Runner) maybeSendRequestTask(ctx context.Context, agentID string) {
 		r.mu.Unlock()
 		return
 	}
+	if ag.everOK != nil && !*ag.everOK {
+		r.mu.Unlock()
+		return
+	}
 	if !ag.cooldownUntil.IsZero() && r.now().Before(ag.cooldownUntil) {
 		r.mu.Unlock()
 		return
@@ -213,12 +217,13 @@ func (r *Runner) maybeSendRequestTask(ctx context.Context, agentID string) {
 	}
 	needsCheck := r.cfg.AuthChecks != nil && len(cmd) > 0 && r.now().Sub(ag.authCheckedAt) > r.cfg.AuthFreshFor
 	kind := ag.kind
+	configDir := ag.configDir
 	r.mu.Unlock()
 
 	if needsCheck {
 		probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
 		var buf bytes.Buffer
-		exit, err := r.exec.Run(probeCtx, "", cmd, &buf)
+		exit, err := r.runCommand(probeCtx, "", cmd, agentEnv(kind, configDir), &buf)
 		cancel()
 		newStatus, newDetail := ParseAuthResult(kind, exit, buf.String(), err)
 
@@ -292,10 +297,12 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		r.mu.Lock()
 		ag, ok := r.agents[targetAgentID]
 		var kind string
+		var configDir string
 		var cmd []string
 		var probeCmd []string
 		if ok {
 			kind = ag.kind
+			configDir = ag.configDir
 			if r.cfg.AuthChecks != nil {
 				cmd = r.cfg.AuthChecks[kind]
 			}
@@ -309,12 +316,13 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 			return
 		}
 
+		extraEnv := agentEnv(kind, configDir)
 		var newStatus string
 		var newDetail string
 		if len(cmd) > 0 {
 			probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
 			var buf bytes.Buffer
-			exit, err := r.exec.Run(probeCtx, "", cmd, &buf)
+			exit, err := r.runCommand(probeCtx, "", cmd, extraEnv, &buf)
 			cancel()
 			newStatus, newDetail = ParseAuthResult(kind, exit, buf.String(), err)
 		} else {
@@ -326,7 +334,7 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		if len(probeCmd) > 0 {
 			pCtx, cancelP := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
 			var pBuf bytes.Buffer
-			pExit, pErr := r.exec.Run(pCtx, "", probeCmd, &pBuf)
+			pExit, pErr := r.runCommand(pCtx, "", probeCmd, extraEnv, &pBuf)
 			cancelP()
 			pStatus, pDetail := ParseProbeResult(pExit, pBuf.String(), pErr)
 			if pStatus == AuthOK || pStatus == AuthNeeds {
@@ -406,10 +414,11 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 
 	// 2. Mọi agent
 	type agentCheckInfo struct {
-		id       string
-		kind     string
-		cmd      []string
-		probeCmd []string
+		id        string
+		kind      string
+		configDir string
+		cmd       []string
+		probeCmd  []string
 	}
 	r.mu.Lock()
 	var agentList []agentCheckInfo
@@ -422,17 +431,18 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		if r.cfg.AuthProbes != nil {
 			probeCmd = r.cfg.AuthProbes[ag.kind]
 		}
-		agentList = append(agentList, agentCheckInfo{id: id, kind: ag.kind, cmd: cmd, probeCmd: probeCmd})
+		agentList = append(agentList, agentCheckInfo{id: id, kind: ag.kind, configDir: ag.configDir, cmd: cmd, probeCmd: probeCmd})
 	}
 	r.mu.Unlock()
 
 	for _, item := range agentList {
+		extraEnv := agentEnv(item.kind, item.configDir)
 		var st string
 		var dt string
 		if len(item.cmd) > 0 {
 			probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
 			var buf bytes.Buffer
-			exit, err := r.exec.Run(probeCtx, "", item.cmd, &buf)
+			exit, err := r.runCommand(probeCtx, "", item.cmd, extraEnv, &buf)
 			cancel()
 			st, dt = ParseAuthResult(item.kind, exit, buf.String(), err)
 		} else {
@@ -443,7 +453,7 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 		if len(item.probeCmd) > 0 {
 			pCtx, cancelP := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
 			var pBuf bytes.Buffer
-			pExit, pErr := r.exec.Run(pCtx, "", item.probeCmd, &pBuf)
+			pExit, pErr := r.runCommand(pCtx, "", item.probeCmd, extraEnv, &pBuf)
 			cancelP()
 			pStatus, pDetail := ParseProbeResult(pExit, pBuf.String(), pErr)
 			if pStatus == AuthOK || pStatus == AuthNeeds {
@@ -481,6 +491,9 @@ func (r *Runner) handleAuthRecheck(ctx context.Context, targetAgentID string) {
 	if r.ghAuthStatus != AuthNeeds {
 		for id, ag := range r.agents {
 			if ag.status != "BUSY" && ag.authStatus != AuthNeeds {
+				if ag.everOK != nil && !*ag.everOK {
+					continue
+				}
 				if ag.cooldownUntil.IsZero() || !r.now().Before(ag.cooldownUntil) {
 					toRequest = append(toRequest, id)
 				}
@@ -556,16 +569,17 @@ func (r *Runner) performPeriodicAuthCheck(ctx context.Context) {
 
 	// 2. Agents not BUSY with check command
 	type agentCheckInfo struct {
-		id   string
-		kind string
-		cmd  []string
+		id        string
+		kind      string
+		configDir string
+		cmd       []string
 	}
 	r.mu.Lock()
 	var toCheck []agentCheckInfo
 	for id, ag := range r.agents {
 		if ag.status != "BUSY" {
 			if cmd, ok := r.cfg.AuthChecks[ag.kind]; ok && len(cmd) > 0 {
-				toCheck = append(toCheck, agentCheckInfo{id: id, kind: ag.kind, cmd: cmd})
+				toCheck = append(toCheck, agentCheckInfo{id: id, kind: ag.kind, configDir: ag.configDir, cmd: cmd})
 			}
 		}
 	}
@@ -574,7 +588,7 @@ func (r *Runner) performPeriodicAuthCheck(ctx context.Context) {
 	for _, item := range toCheck {
 		probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
 		var buf bytes.Buffer
-		exit, err := r.exec.Run(probeCtx, "", item.cmd, &buf)
+		exit, err := r.runCommand(probeCtx, "", item.cmd, agentEnv(item.kind, item.configDir), &buf)
 		cancel()
 		newStatus, newDetail := ParseAuthResult(item.kind, exit, buf.String(), err)
 
@@ -626,16 +640,17 @@ func (r *Runner) performPeriodicAuthProbe(ctx context.Context) {
 	}
 
 	type agentProbeInfo struct {
-		id   string
-		kind string
-		cmd  []string
+		id        string
+		kind      string
+		configDir string
+		cmd       []string
 	}
 	r.mu.Lock()
 	var toProbe []agentProbeInfo
 	for id, ag := range r.agents {
 		if ag.status != "BUSY" {
 			if cmd, ok := r.cfg.AuthProbes[ag.kind]; ok && len(cmd) > 0 {
-				toProbe = append(toProbe, agentProbeInfo{id: id, kind: ag.kind, cmd: cmd})
+				toProbe = append(toProbe, agentProbeInfo{id: id, kind: ag.kind, configDir: ag.configDir, cmd: cmd})
 			}
 		}
 	}
@@ -644,7 +659,7 @@ func (r *Runner) performPeriodicAuthProbe(ctx context.Context) {
 	for _, item := range toProbe {
 		probeCtx, cancel := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
 		var buf bytes.Buffer
-		exit, err := r.exec.Run(probeCtx, "", item.cmd, &buf)
+		exit, err := r.runCommand(probeCtx, "", item.cmd, agentEnv(item.kind, item.configDir), &buf)
 		cancel()
 		newStatus, newDetail := ParseProbeResult(exit, buf.String(), err)
 
@@ -688,5 +703,68 @@ func (r *Runner) performPeriodicAuthProbe(ctx context.Context) {
 		if canRequest {
 			r.maybeSendRequestTask(ctx, item.id)
 		}
+	}
+
+	// Kiểm tra các agent có EverOK == false trong cấu hình: khi ra OK → đặt true, lưu và đóng kết nối để HELLO lại
+	var pendingAgents []AgentConfig
+	r.mu.Lock()
+	for _, a := range r.cfg.Agents {
+		if a.EverOK != nil && !*a.EverOK {
+			pendingAgents = append(pendingAgents, a)
+		}
+	}
+	r.mu.Unlock()
+
+	reconnectNeeded := false
+	for _, pa := range pendingAgents {
+		cmd := r.cfg.AuthProbes[pa.Kind]
+		if len(cmd) == 0 && r.cfg.AuthChecks != nil {
+			cmd = r.cfg.AuthChecks[pa.Kind]
+		}
+		if len(cmd) == 0 {
+			continue
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
+		var buf bytes.Buffer
+		exit, err := r.runCommand(probeCtx, "", cmd, agentEnv(pa.Kind, pa.ConfigDir), &buf)
+		cancel()
+		st, _ := ParseProbeResult(exit, buf.String(), err)
+		if st == AuthOK {
+			r.mu.Lock()
+			for i := range r.cfg.Agents {
+				if strings.EqualFold(r.cfg.Agents[i].AgentName(), pa.AgentName()) {
+					if r.cfg.Agents[i].EverOK != nil {
+						*r.cfg.Agents[i].EverOK = true
+					}
+					break
+				}
+			}
+			accountsPath := r.cfg.AccountsPath
+			conn := r.conn
+			r.mu.Unlock()
+
+			if accountsPath != "" {
+				if af, err := LoadAccounts(accountsPath); err == nil {
+					for idx := range af.Agents {
+						if strings.EqualFold(af.Agents[idx].Name, pa.AgentName()) {
+							af.Agents[idx].EverOK = true
+							break
+						}
+					}
+					_ = SaveAccounts(accountsPath, af)
+				}
+			}
+			if conn != nil {
+				reconnectNeeded = true
+			}
+		}
+	}
+
+	if reconnectNeeded {
+		r.mu.Lock()
+		if r.conn != nil {
+			_ = r.conn.Close()
+		}
+		r.mu.Unlock()
 	}
 }

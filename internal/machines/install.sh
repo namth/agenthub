@@ -107,18 +107,63 @@ fi
 
 chmod +x "$TARGET_BIN"
 
-# Phát hiện agent
-AGENTS=""
+# Phát hiện agent và kiểm tra đăng nhập
+run_probe() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 60 "$@" >/dev/null 2>&1
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout 60 "$@" >/dev/null 2>&1
+    else
+        "$@" >/dev/null 2>&1
+    fi
+}
+
+CLAUDE_OK=0
+AGY_OK=0
+
 if command -v claude >/dev/null 2>&1; then
-    AGENTS='"CLAUDE"'
+    if run_probe claude -p "Trả lời đúng một chữ: OK"; then
+        CLAUDE_OK=1
+    else
+        echo "claude chưa đăng nhập — sau khi đăng nhập chạy: agenthub account add claude"
+    fi
 fi
+
 if command -v agy >/dev/null 2>&1; then
+    if run_probe agy -p "Trả lời đúng một chữ: OK"; then
+        AGY_OK=1
+    else
+        echo "agy chưa đăng nhập — sau khi đăng nhập chạy: agenthub account add antigravity"
+    fi
+fi
+
+AGENTS=""
+AGENTS_JSON_ITEMS=""
+
+if [ "$CLAUDE_OK" = "1" ]; then
+    AGENTS='"CLAUDE"'
+    AGENTS_JSON_ITEMS='{"name":"claude","kind":"CLAUDE","command":["claude","-p","{prompt}"],"config_dir":"","ever_ok":true}'
+fi
+
+if [ "$AGY_OK" = "1" ]; then
     if [ -n "$AGENTS" ]; then
         AGENTS="$AGENTS, \"ANTIGRAVITY\""
     else
         AGENTS='"ANTIGRAVITY"'
     fi
+    if [ -n "$AGENTS_JSON_ITEMS" ]; then
+        AGENTS_JSON_ITEMS="$AGENTS_JSON_ITEMS,{\"name\":\"antigravity\",\"kind\":\"ANTIGRAVITY\",\"command\":[\"agy\",\"-p\",\"{prompt}\"],\"config_dir\":\"\",\"ever_ok\":true}"
+    else
+        AGENTS_JSON_ITEMS='{"name":"antigravity","kind":"ANTIGRAVITY","command":["agy","-p","{prompt}"],"config_dir":"","ever_ok":true}'
+    fi
 fi
+
+AGENTS_FILE="$AGENTHUB_HOME/agents.json"
+OLD_UMASK=$(umask)
+umask 077
+printf '{"agents":[%s]}' "$AGENTS_JSON_ITEMS" > "$AGENTS_FILE"
+chmod 600 "$AGENTS_FILE"
+umask "$OLD_UMASK"
 
 JOIN_PAYLOAD=$(printf '{"code":"%s","name":"%s","os":"%s","arch":"%s","agents":[%s]}' "$JOIN_CODE" "$WORKER_NAME" "$OS" "$ARCH" "$AGENTS")
 
