@@ -102,6 +102,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "runner" {
 		os.Exit(runner.Main(os.Args[2:]))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "account" {
+		os.Exit(runner.AccountMain(os.Args[2:]))
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

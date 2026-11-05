@@ -166,6 +166,9 @@ func Main(args []string) int {
 	}
 
 	homeDir := resolveHome(home)
+	if env := os.Getenv("AGENTHUB_HOME"); env != "" && (home == "~/.agenthub" || home == "") {
+		homeDir = resolveHome(env)
+	}
 	if statusFile == "" {
 		statusFile = filepath.Join(homeDir, "status.json")
 	}
@@ -198,30 +201,42 @@ func Main(args []string) int {
 		return 1
 	}
 
+	agentsFile := filepath.Join(homeDir, "agents.json")
+	var accountsPath string
 	var agents []AgentConfig
-	for _, a := range agentFlags {
-		parts := strings.SplitN(a, "=", 2)
-		if len(parts) != 2 {
-			log.Printf("runner: cờ --agent sai định dạng: %s", a)
-			return 1
+
+	if _, err := os.Stat(agentsFile); err == nil {
+		if af, err := LoadAccounts(agentsFile); err == nil && len(af.Agents) > 0 {
+			agents = af.AgentConfigs()
+			accountsPath = agentsFile
 		}
-		kind := strings.ToUpper(strings.TrimSpace(parts[0]))
-		cmdStr := strings.TrimSpace(parts[1])
-		cmdFields := strings.Fields(cmdStr)
-		if len(cmdFields) == 0 {
-			log.Printf("runner: lệnh agent rỗng: %s", a)
-			return 1
-		}
-		agents = append(agents, AgentConfig{
-			Kind:    kind,
-			Command: cmdFields,
-		})
 	}
+
 	if len(agents) == 0 {
-		agents = append(agents, AgentConfig{
-			Kind:    "ANTIGRAVITY",
-			Command: []string{"agy", "-p", "{prompt}"},
-		})
+		for _, a := range agentFlags {
+			parts := strings.SplitN(a, "=", 2)
+			if len(parts) != 2 {
+				log.Printf("runner: cờ --agent sai định dạng: %s", a)
+				return 1
+			}
+			kind := strings.ToUpper(strings.TrimSpace(parts[0]))
+			cmdStr := strings.TrimSpace(parts[1])
+			cmdFields := strings.Fields(cmdStr)
+			if len(cmdFields) == 0 {
+				log.Printf("runner: lệnh agent rỗng: %s", a)
+				return 1
+			}
+			agents = append(agents, AgentConfig{
+				Kind:    kind,
+				Command: cmdFields,
+			})
+		}
+		if len(agents) == 0 {
+			agents = append(agents, AgentConfig{
+				Kind:    "ANTIGRAVITY",
+				Command: []string{"agy", "-p", "{prompt}"},
+			})
+		}
 	}
 
 	gitRepo := repoDir
@@ -241,6 +256,7 @@ func Main(args []string) int {
 		Token:           authSecret,
 		OS:              osName,
 		Agents:          agents,
+		AccountsPath:    accountsPath,
 		ExhaustPatterns: exhaustPattern,
 		AuthChecks:      DefaultAuthChecks(),
 		AuthProbes:      DefaultAuthProbes(),

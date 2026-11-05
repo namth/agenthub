@@ -1,13 +1,34 @@
 {
   "id": "TASK-050",
   "title": "Runner: agents.json + agenthub account add/remove/list/login",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "d4f6e981-cb77-4d25-addb-a5dd4e760872",
   "history": [
     {
       "at": "2026-11-05T14:54:35",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-05T15:00:07",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-05T15:00:22",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-05T15:29:19",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
-  ]
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-050-agent-accounts-runner/verify.sh",
+    "internal/runner/accounts_test.go",
+    "internal/machines/install_accounts_test.go"
+  ],
+  "via": "agy"
 }

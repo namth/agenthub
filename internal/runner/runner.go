@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -25,8 +26,18 @@ var (
 )
 
 type AgentConfig struct {
-	Kind    string
-	Command []string
+	Kind      string
+	Name      string
+	Command   []string
+	ConfigDir string
+	EverOK    *bool
+}
+
+func (a AgentConfig) AgentName() string {
+	if a.Name != "" {
+		return a.Name
+	}
+	return strings.ToLower(a.Kind)
 }
 
 type Config struct {
@@ -34,6 +45,7 @@ type Config struct {
 	Token           string
 	OS              string
 	Agents          []AgentConfig
+	AccountsPath    string
 	ExhaustPatterns []string
 	DefaultCooldown time.Duration
 	HeartbeatEvery  time.Duration
@@ -61,7 +73,10 @@ type Config struct {
 
 type agentState struct {
 	id            string
+	name          string
 	kind          string
+	configDir     string
+	everOK        *bool
 	command       []string
 	status        string // "IDLE", "BUSY", "COOLDOWN"
 	cooldownUntil time.Time
@@ -69,6 +84,18 @@ type agentState struct {
 	authStatus    string // "OK", "NEEDS_AUTH", "UNKNOWN"
 	authDetail    string
 	authCheckedAt time.Time
+}
+
+func (r *Runner) runCommand(ctx context.Context, dir string, argv []string, extraEnv []string, out io.Writer) (int, error) {
+	if len(extraEnv) == 0 {
+		return r.exec.Run(ctx, dir, argv, out)
+	}
+	if ee, ok := r.exec.(EnvExecutor); ok {
+		fullEnv := append(os.Environ(), extraEnv...)
+		return ee.RunEnv(ctx, dir, argv, fullEnv, out)
+	}
+	envPrefix := append([]string{"env"}, extraEnv...)
+	return r.exec.Run(ctx, dir, append(envPrefix, argv...), out)
 }
 
 type activeTask struct {
@@ -271,9 +298,19 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 		}
 	}()
 
+	// 0. Nạp lại cấu hình accounts nếu có AccountsPath
+	if r.cfg.AccountsPath != "" {
+		if af, err := LoadAccounts(r.cfg.AccountsPath); err == nil && len(af.Agents) > 0 {
+			r.mu.Lock()
+			r.cfg.Agents = af.AgentConfigs()
+			r.mu.Unlock()
+		}
+	}
+
 	// 1. Initial auth probe before HANDSHAKE
 	var ghAuthStatus = AuthUnknown
 	var ghAuthDetail = ""
+	agentAuthByName := make(map[string]authInfo)
 	agentAuthByKind := make(map[string]authInfo)
 
 	if r.cfg.AuthChecks != nil {
@@ -285,61 +322,73 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 			cancel()
 			ghAuthStatus, ghAuthDetail = ParseAuthResult(AuthKindGH, exit, buf.String(), err)
 		}
+	}
 
-		// Probe configured agents by kind
-		for _, a := range r.cfg.Agents {
-			if _, already := agentAuthByKind[a.Kind]; already {
-				continue
-			}
+	for i := range r.cfg.Agents {
+		a := &r.cfg.Agents[i]
+		st := AuthUnknown
+		dt := ""
+		checkedAt := r.now()
+		agentEnvList := agentEnv(a.Kind, a.ConfigDir)
+
+		if r.cfg.AuthChecks != nil {
 			if cmd, ok := r.cfg.AuthChecks[a.Kind]; ok && len(cmd) > 0 {
 				probeCtx, cancel := context.WithTimeout(ctx, r.cfg.AuthCheckTimeout)
 				var buf bytes.Buffer
-				exit, err := r.exec.Run(probeCtx, "", cmd, &buf)
+				exit, err := r.runCommand(probeCtx, "", cmd, agentEnvList, &buf)
 				cancel()
-				st, dt := ParseAuthResult(a.Kind, exit, buf.String(), err)
-				agentAuthByKind[a.Kind] = authInfo{status: st, detail: dt, checkedAt: r.now()}
-			} else {
-				agentAuthByKind[a.Kind] = authInfo{status: AuthUnknown, detail: "", checkedAt: r.now()}
+				st, dt = ParseAuthResult(a.Kind, exit, buf.String(), err)
 			}
 		}
-	} else {
-		for _, a := range r.cfg.Agents {
-			agentAuthByKind[a.Kind] = authInfo{status: AuthUnknown, detail: "", checkedAt: r.now()}
-		}
-	}
 
-	if r.cfg.AuthProbes != nil {
-		seenProbeKind := make(map[string]bool)
-		for _, a := range r.cfg.Agents {
-			if seenProbeKind[a.Kind] {
-				continue
-			}
-			seenProbeKind[a.Kind] = true
+		if r.cfg.AuthProbes != nil {
 			if probeCmd, ok := r.cfg.AuthProbes[a.Kind]; ok && len(probeCmd) > 0 {
 				probeCtx, cancel := context.WithTimeout(ctx, r.cfg.ProbeTimeout)
 				var buf bytes.Buffer
-				exit, err := r.exec.Run(probeCtx, "", probeCmd, &buf)
+				exit, err := r.runCommand(probeCtx, "", probeCmd, agentEnvList, &buf)
 				cancel()
-				st, dt := ParseProbeResult(exit, buf.String(), err)
-				if st == AuthOK || st == AuthNeeds {
-					agentAuthByKind[a.Kind] = authInfo{status: st, detail: dt, checkedAt: r.now()}
+				pst, pdt := ParseProbeResult(exit, buf.String(), err)
+				if pst == AuthOK || pst == AuthNeeds {
+					st = pst
+					dt = pdt
 				}
 			}
 		}
+
+		if st == AuthOK && a.EverOK != nil && !*a.EverOK {
+			*a.EverOK = true
+			if r.cfg.AccountsPath != "" {
+				if af, err := LoadAccounts(r.cfg.AccountsPath); err == nil {
+					for idx := range af.Agents {
+						if strings.EqualFold(af.Agents[idx].Name, a.AgentName()) {
+							af.Agents[idx].EverOK = true
+							break
+						}
+					}
+					_ = SaveAccounts(r.cfg.AccountsPath, af)
+				}
+			}
+		}
+
+		info := authInfo{status: st, detail: dt, checkedAt: checkedAt}
+		agentAuthByName[a.AgentName()] = info
+		agentAuthByKind[a.Kind] = info
 	}
 
 	r.mu.Lock()
 	r.ghAuthStatus = ghAuthStatus
 	r.ghAuthDetail = ghAuthDetail
 	r.ghAuthCheckedAt = r.now()
-	r.initAgentAuth = agentAuthByKind
+	r.initAgentAuth = agentAuthByName
 	r.mu.Unlock()
 
 	// Gửi HANDSHAKE ban đầu
 	type handshakeAgent struct {
 		Kind       string `json:"kind"`
+		Name       string `json:"name"`
 		AuthStatus string `json:"auth_status"`
 		AuthDetail string `json:"auth_detail,omitempty"`
+		EverOK     *bool  `json:"ever_ok,omitempty"`
 	}
 	type handshakeData struct {
 		OS      string           `json:"os"`
@@ -352,14 +401,26 @@ func (r *Runner) connectAndServe(ctx context.Context) error {
 		Data  handshakeData `json:"data"`
 	}
 
-	hAgents := make([]handshakeAgent, len(r.cfg.Agents))
-	for i, a := range r.cfg.Agents {
-		info := agentAuthByKind[a.Kind]
-		hAgents[i] = handshakeAgent{
+	var hAgents []handshakeAgent
+	for _, a := range r.cfg.Agents {
+		if a.EverOK != nil && !*a.EverOK {
+			continue
+		}
+		info := agentAuthByName[a.AgentName()]
+		var everOK *bool
+		if a.EverOK != nil {
+			everOK = a.EverOK
+		}
+		hAgents = append(hAgents, handshakeAgent{
 			Kind:       a.Kind,
+			Name:       a.AgentName(),
 			AuthStatus: info.status,
 			AuthDetail: info.detail,
-		}
+			EverOK:     everOK,
+		})
+	}
+	if hAgents == nil {
+		hAgents = []handshakeAgent{}
 	}
 	r.send(handshakeMsg{
 		Event: "HANDSHAKE",
@@ -518,6 +579,9 @@ func (r *Runner) handleMessage(ctx context.Context, raw []byte) {
 	case "LEASE_REVOKED":
 		r.handleLeaseRevoked(env.AgentID)
 
+	case "AGENT_REMOVE":
+		r.handleAgentRemove(env.AgentID)
+
 	case "ERROR":
 		if env.Code == "STALE_EPOCH" || env.Code == "NOT_LEAD" {
 			r.mu.Lock()
@@ -537,13 +601,26 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 	r.mu.Lock()
 	r.serverVersion = serverVersion
 	for _, sa := range agents {
+		name := sa.ID
+		if idx := strings.LastIndex(sa.ID, "/"); idx != -1 {
+			name = sa.ID[idx+1:]
+		}
+
 		var matchedCfg *AgentConfig
 		for i := range r.cfg.Agents {
 			cfgAgent := &r.cfg.Agents[i]
-			if strings.HasSuffix(strings.ToLower(sa.ID), "/"+strings.ToLower(cfgAgent.Kind)) ||
-				strings.EqualFold(sa.ID, cfgAgent.Kind) {
+			if strings.EqualFold(cfgAgent.AgentName(), name) {
 				matchedCfg = cfgAgent
 				break
+			}
+		}
+		if matchedCfg == nil {
+			for i := range r.cfg.Agents {
+				cfgAgent := &r.cfg.Agents[i]
+				if strings.EqualFold(cfgAgent.Kind, name) {
+					matchedCfg = cfgAgent
+					break
+				}
 			}
 		}
 		if matchedCfg == nil && len(r.cfg.Agents) > 0 {
@@ -551,7 +628,10 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 		}
 
 		ag, exists := r.agents[sa.ID]
-		initInfo := r.initAgentAuth[matchedCfg.Kind]
+		initInfo := r.initAgentAuth[matchedCfg.AgentName()]
+		if initInfo.status == "" {
+			initInfo = r.initAgentAuth[matchedCfg.Kind]
+		}
 		st := initInfo.status
 		if st == "" {
 			st = AuthUnknown
@@ -559,7 +639,10 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 		if !exists {
 			ag = &agentState{
 				id:            sa.ID,
+				name:          matchedCfg.AgentName(),
 				kind:          matchedCfg.Kind,
+				configDir:     matchedCfg.ConfigDir,
+				everOK:        matchedCfg.EverOK,
 				command:       matchedCfg.Command,
 				status:        "IDLE",
 				authStatus:    st,
@@ -568,7 +651,10 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 			}
 			r.agents[sa.ID] = ag
 		} else {
+			ag.name = matchedCfg.AgentName()
 			ag.kind = matchedCfg.Kind
+			ag.configDir = matchedCfg.ConfigDir
+			ag.everOK = matchedCfg.EverOK
 			ag.command = matchedCfg.Command
 			ag.authStatus = st
 			ag.authDetail = initInfo.detail
@@ -595,6 +681,9 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 	if r.ghAuthStatus != AuthNeeds {
 		for id, ag := range r.agents {
 			if ag.status != "BUSY" && ag.authStatus != AuthNeeds {
+				if ag.everOK != nil && !*ag.everOK {
+					continue
+				}
 				if ag.cooldownUntil.IsZero() || !now.Before(ag.cooldownUntil) {
 					ag.status = "IDLE"
 					toRequest = append(toRequest, id)
@@ -604,9 +693,71 @@ func (r *Runner) handleHandshakeOK(ctx context.Context, serverVersion string, ag
 	}
 	r.mu.Unlock()
 
-	for _, id := range toRequest {
-		r.maybeSendRequestTask(ctx, id)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Millisecond):
+		}
+		for _, id := range toRequest {
+			r.maybeSendRequestTask(ctx, id)
+		}
+	}()
+}
+
+func (r *Runner) handleAgentRemove(agentID string) {
+	name := agentID
+	if idx := strings.LastIndex(agentID, "/"); idx != -1 {
+		name = agentID[idx+1:]
 	}
+
+	r.mu.Lock()
+	if cancel, exists := r.activeLeases[agentID]; exists {
+		cancel()
+		delete(r.activeLeases, agentID)
+	}
+	delete(r.agents, agentID)
+
+	var newCfgAgents []AgentConfig
+	for _, a := range r.cfg.Agents {
+		if !strings.EqualFold(a.AgentName(), name) {
+			newCfgAgents = append(newCfgAgents, a)
+		}
+	}
+	r.cfg.Agents = newCfgAgents
+	accountsPath := r.cfg.AccountsPath
+	r.mu.Unlock()
+
+	if accountsPath != "" {
+		af, err := LoadAccounts(accountsPath)
+		if err == nil {
+			var newAgents []AccountEntry
+			removedName := ""
+			for _, a := range af.Agents {
+				if strings.EqualFold(a.Name, name) {
+					removedName = a.Name
+				} else {
+					newAgents = append(newAgents, a)
+				}
+			}
+			if removedName == "" {
+				removedName = name
+			}
+			af.Agents = newAgents
+			alreadyRemoved := false
+			for _, rem := range af.Removed {
+				if strings.EqualFold(rem, removedName) {
+					alreadyRemoved = true
+					break
+				}
+			}
+			if !alreadyRemoved {
+				af.Removed = append(af.Removed, removedName)
+			}
+			_ = SaveAccounts(accountsPath, af)
+		}
+	}
+	r.writeStatus(true)
 }
 
 func (r *Runner) handleJobAvailable(ctx context.Context) {
@@ -725,26 +876,63 @@ func (r *Runner) handleAssignTask(
 
 	r.mu.Lock()
 	ag, exists := r.agents[agentID]
+	name := agentID
+	if idx := strings.LastIndex(agentID, "/"); idx != -1 {
+		name = agentID[idx+1:]
+	}
+	var matchedCfg *AgentConfig
+	for i := range r.cfg.Agents {
+		if strings.EqualFold(r.cfg.Agents[i].AgentName(), name) {
+			matchedCfg = &r.cfg.Agents[i]
+			break
+		}
+	}
+	if matchedCfg == nil {
+		for i := range r.cfg.Agents {
+			if strings.EqualFold(r.cfg.Agents[i].Kind, name) {
+				matchedCfg = &r.cfg.Agents[i]
+				break
+			}
+		}
+	}
+	if matchedCfg == nil && len(r.cfg.Agents) > 0 {
+		matchedCfg = &r.cfg.Agents[0]
+	}
+
 	if !exists {
+		var cmd []string
+		var configDir string
+		kind := jobKind
+		var everOK *bool
+		if matchedCfg != nil {
+			cmd = matchedCfg.Command
+			configDir = matchedCfg.ConfigDir
+			kind = matchedCfg.Kind
+			everOK = matchedCfg.EverOK
+		}
 		ag = &agentState{
-			id:     agentID,
-			kind:   jobKind,
-			status: "BUSY",
+			id:        agentID,
+			name:      name,
+			kind:      kind,
+			command:   cmd,
+			configDir: configDir,
+			everOK:    everOK,
+			status:    "BUSY",
 		}
 		r.agents[agentID] = ag
 	} else {
 		ag.status = "BUSY"
+		if ag.configDir == "" && matchedCfg != nil {
+			ag.configDir = matchedCfg.ConfigDir
+		}
+		if ag.everOK == nil && matchedCfg != nil {
+			ag.everOK = matchedCfg.EverOK
+		}
 	}
 
 	cmdTemplate := ag.command
-	if len(cmdTemplate) == 0 {
-		for _, a := range r.cfg.Agents {
-			if strings.HasSuffix(strings.ToLower(agentID), "/"+strings.ToLower(a.Kind)) ||
-				strings.EqualFold(ag.kind, a.Kind) {
-				cmdTemplate = a.Command
-				break
-			}
-		}
+	if len(cmdTemplate) == 0 && matchedCfg != nil {
+		cmdTemplate = matchedCfg.Command
 	}
 	if len(cmdTemplate) == 0 && len(r.cfg.Agents) > 0 {
 		cmdTemplate = r.cfg.Agents[0].Command
@@ -984,10 +1172,18 @@ func (r *Runner) runTask(
 		}
 	}
 
+	r.mu.Lock()
+	agTask := r.agents[agentID]
+	var extraEnv []string
+	if agTask != nil {
+		extraEnv = agentEnv(agTask.kind, agTask.configDir)
+	}
+	r.mu.Unlock()
+
 	cw := newChunkWriter(assignmentID, r.cfg.LogFlushEvery, r.cfg.LogFlushBytes, r.send)
 	defer cw.close()
 
-	exitCode, execErr := r.exec.Run(ctx, dir, argv, cw)
+	exitCode, execErr := r.runCommand(ctx, dir, argv, extraEnv, cw)
 	cw.flushRemaining()
 
 	// 1. Task bị huỷ (ABORT_TASK hoặc timeout)
@@ -1267,6 +1463,20 @@ func (r *Runner) runTask(
 		delete(r.activeTasks, assignmentID)
 		if ag, ok := r.agents[agentID]; ok {
 			ag.status = "IDLE"
+			if ag.everOK != nil && !*ag.everOK {
+				*ag.everOK = true
+				if r.cfg.AccountsPath != "" {
+					if af, err := LoadAccounts(r.cfg.AccountsPath); err == nil {
+						for idx := range af.Agents {
+							if strings.EqualFold(af.Agents[idx].Name, ag.name) {
+								af.Agents[idx].EverOK = true
+								break
+							}
+						}
+						_ = SaveAccounts(r.cfg.AccountsPath, af)
+					}
+				}
+			}
 		}
 		updateNeeded := r.shouldUpdateLocked()
 		r.mu.Unlock()
