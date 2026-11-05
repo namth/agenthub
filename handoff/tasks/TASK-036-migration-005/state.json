@@ -1,0 +1,33 @@
+{
+  "id": "TASK-036",
+  "title": "Migration 005: WAITING_USER, làm rõ, allowlist, token, sandbox",
+  "status": "accepted",
+  "conversation_id": "35233f69-d4dd-4605-aaa9-f5883fe81ebe",
+  "history": [
+    {
+      "at": "2026-11-04T21:29:04",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T21:35:42",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T21:36:06",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T21:49:38",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-036-migration-005/verify.sh",
+    "internal/database/migrate005_test.go"
+  ],
+  "via": "agy"
+}

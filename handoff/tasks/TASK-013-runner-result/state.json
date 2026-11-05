@@ -1,0 +1,40 @@
+{
+  "id": "TASK-013",
+  "title": "Runner: đọc result.json, mở PR cho job CODE (DEC-12)",
+  "status": "accepted",
+  "conversation_id": "76052710-80ea-4f09-afd5-90818c72dd50",
+  "history": [
+    {
+      "at": "2026-11-04T09:13:20",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T09:13:51",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T09:14:14",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:22:48",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:23:57",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-013-runner-result/verify.sh",
+    "internal/runner/result_test.go",
+    "internal/runner/runner_test.go",
+    "internal/runner/integration_test.go"
+  ],
+  "via": "agy"
+}

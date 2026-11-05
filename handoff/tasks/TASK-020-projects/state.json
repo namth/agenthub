@@ -1,0 +1,40 @@
+{
+  "id": "TASK-020",
+  "title": "Dự án: liệt kê repo, thêm dự án + webhook, vai theo dự án, đăng nhập đa dự án",
+  "status": "accepted",
+  "conversation_id": "35236215-779d-47fd-97b1-d0482f85d4a4",
+  "history": [
+    {
+      "at": "2026-11-04T11:52:41",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T11:54:25",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T11:54:49",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T12:05:54",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T12:07:03",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-020-projects/verify.sh",
+    "internal/projects/projects_test.go",
+    "internal/auth/multi_test.go",
+    "internal/auth/auth_test.go"
+  ],
+  "via": "agy"
+}

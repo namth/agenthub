@@ -1,0 +1,3 @@
+5869f39da436eff9b8d56dfc6c4f6cdb2547b140170c6ad83a226dc62b074c0e  handoff/tasks/TASK-036-migration-005/verify.sh
+66a1c782cc430bc965ef76fb38ec07b0a2c1814247a49352ee1a193b4d263f00  internal/database/migrate005_test.go
+b7456a08b79a48ebc4023e092dd12c48eb0a9d1af22cfe9ad23f946d476d6ec2  internal/database/db_test.go

@@ -1,0 +1,3 @@
+c4d9bbcf72645ade625748bcf883ec303f45ed02072c8661b14ee9fed25f5f8b  handoff/tasks/TASK-039-clarify-api/verify.sh
+44fd74ac054151747fa746e9cfa2950dc39169cec2991f71c3f3ea6244c25a12  internal/tasks/clarify_test.go
+13c6892e73fb90db693f26854cbe72d124fda3095b24240546a6bac25d80128e  internal/telegram/clarify_test.go

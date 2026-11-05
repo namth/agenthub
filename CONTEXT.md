@@ -18,7 +18,9 @@ AgentHub là nền tảng điều phối đa AI Agent phân tán (Distributed Mu
 - **Kiểm định chất lượng (QA):** 2 Lớp (GitHub Actions CI chạy trước -> Claude Code AI Review chuyên sâu).
 - **Kênh thông báo tức thì:** Telegram Bot (thông báo duyệt yêu cầu & nghiệm thu PR).
 - **Trưởng phòng trực & chuyển giao (FEAT-01):** Server Go là bộ điều phối duy nhất; việc trí tuệ là job; một agent Claude giữ `lead_lease` (epoch, TTL 90s). Hết limit → `COOLDOWN`, job giao lại cho agent rảnh làm tiếp từ nhánh; fencing bằng `assignment_id`/`epoch`.
-- **Văn phòng ảo (FEAT-02):** SCR-08 tuỳ chọn, pixel-art chỉ quan sát, vẽ từ sự kiện server qua SSE.
+- **Văn phòng ảo (FEAT-02, bản 2):** SCR-08 tuỳ chọn, pixel-art chỉ quan sát, vẽ từ sự kiện server qua SSE; khu làm việc ≥ 8 bàn hai cụm, bàn Trưởng phòng, khu chỉ huy mỗi tài khoản một bàn, logo INOVA; owner + partner xem.
+- **Trạng thái đăng nhập agent (FEAT-06):** `agents.auth_status OK|NEEDS_AUTH|UNKNOWN`, `workers.gh_auth`; agent `NEEDS_AUTH` không nhận việc/không làm lead. Lead có thể là agent bất kỳ có `lead_eligible` (DEC-29). Telegram cấu hình trong `.env` (DEC-30).
+- **Phòng IT phân tán (FEAT-07 → 10, SPEC):** SPEC được hỏi lại người dùng (`NEED_INFO` → `WAITING_USER`); skill `agenthub-spec` nhúng trong runner; CLI chạy với allowlist lệnh theo dự án, không bao giờ bỏ qua quyền; máy partner chỉ nhận việc dự án mình là thành viên; không cấp secret cho runner; owner điều hành qua web (cả điện thoại), Telegram và MCP `/mcp` (token cá nhân).
 
 ## 3. CẤU TRÚC THƯ MỤC CỐT LÕI
 ```text
@@ -29,12 +31,20 @@ agenthub/
 │   ├── database/                 # SQLite connection & migrations
 │   ├── dispatcher/               # Task Queue & phân bổ việc cho Worker
 │   ├── gateway/                  # WebSocket Hub (quản lý kết nối các máy con)
+│   ├── api/                      # REST Fleet & quản trị trưởng phòng
+│   ├── auth/                     # GitHub OAuth, JWT, RBAC (thay cho dòng auth ở trên)
+│   ├── tasks/                    # Tasks/Kanban, GitHub Issues, webhook, tasks.Service
+│   ├── pipeline/                 # Prompt cho agent, chuyển trạng thái task theo result.json (DEC-12)
+│   ├── runner/                   # Runner daemon `agenthub runner` (DEC-10)
+│   ├── logs/                     # Lưu & stream log job
+│   ├── office/                   # Văn phòng ảo: event bus + SSE (FEAT-02)
+│   └── e2e/                      # Test trọn dây chuyền
 │   ├── github/                   # GitHub API Client & Webhook Handlers
 │   └── telegram/                 # Telegram Bot alerts & inline approval
 ├── web/                          # Frontend source code (Vite + React + Tailwind)
 │   ├── dist/                     # Build output được nhúng vào Go qua go:embed
 │   └── src/                      # Kanban, Fleet Monitor, Live Terminal
-├── runner/                       # Daemon client chạy ngầm trên từng máy con (Python/Go)
+│   (internal/runner/)            # Runner daemon máy con, lệnh `agenthub runner` (DEC-10)
 ├── docs/                         # Bộ 14 tài liệu + docs/features/
 └── CONTEXT.md                    # File này
 ```
@@ -61,4 +71,9 @@ agenthub/
 | FEAT-01 | Luân chuyển Trưởng phòng & chuyển giao khi hết limit | [features/lead-rotation.md](docs/features/lead-rotation.md) |
 | FEAT-02 | Văn phòng ảo (sơ đồ phối hợp trực quan) | [features/virtual-office.md](docs/features/virtual-office.md) |
 | FEAT-03 | Dây chuyền vai trò BA/Designer/Dev/Test | BACKLOG |
-| FEAT-04 | Đa dự án song song | BACKLOG |
+| FEAT-04 | Đa dự án song song | [features/multi-project.md](docs/features/multi-project.md) |
+| FEAT-05 | Thêm máy bằng một lệnh, máy của partner, trang Đóng góp | [features/join-machine.md](docs/features/join-machine.md) |
+| FEAT-06 | Trạng thái đăng nhập agent & trưởng phòng mọi loại agent | [features/agent-auth.md](docs/features/agent-auth.md) |
+| FEAT-07 & 08 | Phỏng vấn làm rõ yêu cầu & kỹ năng trưởng phòng nhúng runner | [features/clarification-and-shared-skills.md](docs/features/clarification-and-shared-skills.md) |
+| FEAT-09 | Vận hành thật & an toàn đa partner | [features/ops-readiness.md](docs/features/ops-readiness.md) |
+| FEAT-10 | Điều hành từ mọi nơi (Telegram, MCP, điện thoại) & REPLAN có hành động | [features/remote-command.md](docs/features/remote-command.md) |

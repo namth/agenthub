@@ -1,0 +1,4 @@
+acc92c1a240c7b22f47280cc05954bc199312a65040f6b5bfb8e26aa036c22de  handoff/tasks/TASK-001-nen-go-sqlite/verify.sh
+c25e4517f344395284f782b0438e6eeca4905ef8dcee878d18fd0c4635ffeab2  internal/database/db_test.go
+811197ba2089128223b817079fc81eebe8130e0d423100c935f46fdb547d97fc  internal/server/server_test.go
+03898a1a8ab4c732c5b7d0d7a705527b2f69e5084ac432cbf7eaf66a28905a80  web/embed_test.go

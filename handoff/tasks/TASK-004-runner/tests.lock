@@ -1,0 +1,3 @@
+19d9c821d291b33d093e9f6603f3c3d6ec69c98a2d733b202b8d161e875ec599  handoff/tasks/TASK-004-runner/verify.sh
+482fb993a27bba4ff5f9d8079e5af4dc9f4f34814a4bf103164f18566dc83a8e  internal/runner/runner_test.go
+044ae0d0427bfd0dea30dbb49a2ad937c8564d00dc2af5c96f8fa6069b97c824  internal/runner/integration_test.go

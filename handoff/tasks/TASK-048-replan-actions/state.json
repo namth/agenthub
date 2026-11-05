@@ -1,0 +1,41 @@
+{
+  "id": "TASK-048",
+  "title": "REPLAN/UNBLOCK có hành động + đề xuất huỷ chờ Admin",
+  "status": "accepted",
+  "conversation_id": "07380f88-eaee-487d-a792-0fea4917b84d",
+  "history": [
+    {
+      "at": "2026-11-04T22:18:42",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-05T07:40:29",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-05T07:40:51",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-05T07:56:39",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-05T08:00:26",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-048-replan-actions/verify.sh",
+    "internal/pipeline/replan_test.go",
+    "internal/tasks/proposals_test.go",
+    "internal/telegram/proposals_test.go",
+    "web/src/pages/proposal.test.tsx"
+  ],
+  "via": "agy"
+}

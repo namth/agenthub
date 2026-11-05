@@ -17,14 +17,20 @@ DATABASE_PATH=./data/agenthub.db
 # GITHUB INTEGRATION
 GITHUB_CLIENT_ID=your_github_oauth_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
-GITHUB_REPO_OWNER=your-org-or-username
+GITHUB_OWNER=your-username        # quản trị hệ thống = tài khoản này (DEC-17)
+GITHUB_REPO_OWNER=your-org-or-username   # chỉ dùng tạo dự án đầu tiên khi DB trống (DEC-14)
 GITHUB_REPO_NAME=your-repo-name
+RUNNERS_DIR=./runners             # binary runner cho /download (FEAT-05)
 GITHUB_WEBHOOK_SECRET=your_github_webhook_hmac_secret
 GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_pat_for_api_calls
+GITHUB_API_URL=   # để trống = https://api.github.com; chỉ đặt khi dùng GitHub Enterprise hoặc chạy thử với GitHub giả
 
 # TELEGRAM BOT ALERTS
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
 TELEGRAM_ADMIN_CHAT_ID=987654321
+TELEGRAM_WEBHOOK_SECRET=random_secret_for_telegram_webhook   # header X-Telegram-Bot-Api-Secret-Token
+CI_GATE=true   # true: chỉ tạo job Claude review sau khi GitHub Actions CI đạt (Chốt chặn 1, docs/13 §2)
+TZ_DISPLAY=Asia/Ho_Chi_Minh   # múi giờ hiển thị giờ trong tin Telegram và văn phòng ảo
 
 # AGENT FLEET SECURITY
 RUNNER_REGISTRATION_KEY=master_key_for_registering_new_runners
@@ -62,3 +68,8 @@ DEFAULT_COOLDOWN_MIN=60
 - **Văn phòng ảo không rò rỉ bí mật:** `text` của sự kiện tối đa 80 ký tự, che chuỗi giống token (BR-20); không đẩy log thô hay prompt lên SCR-08.
 - **Cấu hình runner** (`exhaust_patterns`, `default_cooldown_min`, `soft_limit`) nằm ở file cấu hình trên từng máy, không chứa bí mật.
 - **Điều khoản nhà cung cấp:** việc luân phiên nhiều máy/tài khoản phải tuân thủ điều khoản sử dụng của Anthropic/Google (mỗi tài khoản là của người dùng thật hoặc dùng API key hợp lệ).
+
+### 2.5 Mã tham gia & cài máy (FEAT-05)
+- Mã tham gia chỉ lưu SHA-256, dùng một lần, hết hạn 15 phút, giới hạn 5 lần thử/phút/IP.
+- `install.sh` và binary tải qua HTTPS từ chính server; binary phải khớp `.sha256`.
+- PAT cần thêm quyền **Webhooks: Read and write** để server tự tạo webhook cho dự án mới (DEC-14).

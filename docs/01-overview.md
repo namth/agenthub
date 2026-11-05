@@ -24,7 +24,9 @@
   - Chiếm dưới **30MB RAM** khi vận hành.
 * **Tách biệt vai trò thông minh:**
   - **Claude Code:** Làm Kiến trúc sư trưởng (Tech Lead) và Trưởng ban Kiểm định (QA/Code Reviewer).
-  - **Dàn máy Antigravity:** Làm Kỹ sư thi công (Engineers) giải quyết khối lượng code lớn song song.
+  - **Dàn máy Antigravity:** Làm Kỹ sư thi công (Engineers) giải quyết khối lượng code lớn song song; có thể tiếp quản vai trưởng phòng khi Admin bật `lead_eligible` (DEC-29).
+  - **Điều hành từ mọi nơi:** owner tạo/duyệt/trả lời/merge qua web (cả điện thoại), Telegram, hoặc Claude Code/Claude app qua MCP (FEAT-10); trưởng phòng AI hỏi lại khi yêu cầu chưa rõ (FEAT-07).
+  - **Chỉ giao việc cho agent sẵn sàng thật:** agent chưa đăng nhập CLI (`NEEDS_AUTH`) không nhận việc, được báo trên web/Telegram (FEAT-06).
 * **An toàn & Minh bạch mã nguồn:** Dùng **Git Worktrees** cô lập hoàn toàn môi trường làm việc trên từng máy con; lấy **GitHub Issues & Pull Requests** làm chân lý dữ liệu duy nhất.
 
 ---
@@ -36,7 +38,7 @@
    - Giám sát live logs terminal của các máy con và bấm Merge vào nhánh chính `main`.
 2. **Đối tác (Partner / Stakeholder):**
    - Đưa ra yêu cầu tính năng qua giao diện Web thân thiện hoặc tạo Issue trên GitHub.
-   - Theo dõi tiến độ trực quan theo thời gian thực (Kanban) mà không cần hiểu sâu về kỹ thuật.
+   - Theo dõi tiến độ trực quan theo thời gian thực (Kanban, Văn phòng ảo SCR-08 — DEC-27) mà không cần hiểu sâu về kỹ thuật.
 3. **AI Agents (Autonomous Workers):**
    - **Claude Code:** Nhận lệnh qua CLI headless để lập kế hoạch hoặc review PR.
    - **Antigravity Instances:** Nhận task qua CLI headless để viết code trên branch riêng.

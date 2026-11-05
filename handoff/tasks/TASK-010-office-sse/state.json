@@ -1,0 +1,38 @@
+{
+  "id": "TASK-010",
+  "title": "Văn phòng ảo backend: event bus, SSE, bật/tắt (TASK-15, FEAT-02)",
+  "status": "accepted",
+  "conversation_id": "a786a11e-82a5-4f4f-b048-e74873897d89",
+  "history": [
+    {
+      "at": "2026-11-04T08:54:47",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T08:56:29",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-04T08:56:41",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T09:04:23",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T09:05:54",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-010-office-sse/verify.sh",
+    "internal/office/office_test.go"
+  ],
+  "via": "agy"
+}

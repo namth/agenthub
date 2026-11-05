@@ -1,0 +1,3 @@
+b7f4175df795a65f058bb892dc9ac2ee7dc247bd1338d936db6204d14ba1eb7f  handoff/tasks/TASK-008-web-screens/verify.sh
+e555d7c0d384a53d4ef32ef02ee80342ecc6b1ddf81346c1a2423b02e840ee70  web/src/pages/screens.test.tsx
+372d73a7fae549ae7c364c103013b9b8ed261757bda143efa1ebea990415e544  web/src/nav.test.ts

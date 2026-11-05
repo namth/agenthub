@@ -1,0 +1,20 @@
+# Dịch vụ systemd cho AgentHub (single binary). Cài: xem deploy/README.md
+[Unit]
+Description=AgentHub - điều phối đa AI agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/.env
+ExecStart=__DIR__/agenthub
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=__DIR__
+
+[Install]
+WantedBy=multi-user.target

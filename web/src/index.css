@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-led-online: #22c55e;
+  --color-led-busy: #f59e0b;
+  --color-led-cooldown: #a855f7;
+  --color-led-offline: #9ca3af;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}

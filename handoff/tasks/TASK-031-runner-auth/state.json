@@ -1,0 +1,38 @@
+{
+  "id": "TASK-031",
+  "title": "Runner: kiểm đăng nhập CLI, auth_patterns, AUTH_RECHECK",
+  "status": "accepted",
+  "conversation_id": "0a9941e1-04a0-4ab0-bee7-01ab2c87e5b1",
+  "history": [
+    {
+      "at": "2026-11-04T16:24:20",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T16:26:10",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-medium)"
+    },
+    {
+      "at": "2026-11-04T16:26:33",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T16:42:49",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T16:45:48",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-031-runner-auth/verify.sh",
+    "internal/runner/auth_test.go"
+  ],
+  "via": "agy"
+}

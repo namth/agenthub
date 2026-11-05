@@ -1,0 +1,339 @@
+package telegram
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/namth/agenthub/internal/dispatcher"
+)
+
+type notifyItem struct {
+	chatID  string
+	text    string
+	buttons [][]Button
+}
+
+type revokedLead struct {
+	agentID string
+	reason  string
+}
+
+// Notifier gửi thông báo tới quản trị viên qua Telegram.
+type Notifier struct {
+	sender      Sender
+	adminChatID string
+	loc         *time.Location
+
+	queue chan notifyItem
+	done  chan struct{}
+	wg    sync.WaitGroup
+	once  sync.Once
+
+	mu          sync.Mutex
+	lastRevoked *revokedLead
+}
+
+// NewNotifier khởi tạo Notifier với hàng đợi bất đồng bộ có giới hạn.
+// Khi hàng đợi đầy, tin mới sẽ bị bỏ qua và không làm chặn luồng gọi.
+func NewNotifier(s Sender, adminChatID string, loc *time.Location) *Notifier {
+	if loc == nil {
+		loc = time.UTC
+	}
+	n := &Notifier{
+		sender:      s,
+		adminChatID: adminChatID,
+		loc:         loc,
+		queue:       make(chan notifyItem, 256),
+		done:        make(chan struct{}),
+	}
+
+	n.wg.Add(1)
+	go n.worker()
+
+	return n
+}
+
+func (n *Notifier) worker() {
+	defer n.wg.Done()
+	for {
+		select {
+		case <-n.done:
+			return
+		case item := <-n.queue:
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_ = n.sender.SendMessage(ctx, item.chatID, item.text, item.buttons)
+			cancel()
+		}
+	}
+}
+
+func (n *Notifier) enqueue(item notifyItem) {
+	select {
+	case <-n.done:
+		return
+	case n.queue <- item:
+	default:
+		// Hàng đợi đầy: bỏ tin để tránh nghẽn luồng gọi
+	}
+}
+
+// Close dừng goroutine gửi thông báo.
+func (n *Notifier) Close() {
+	n.once.Do(func() {
+		close(n.done)
+		n.wg.Wait()
+	})
+}
+
+// Notify nhận sự kiện dispatcher và gửi thông báo tương ứng.
+func (n *Notifier) Notify(e dispatcher.Event) {
+	switch e.Type {
+	case dispatcher.EvLeaseRevoked:
+		n.mu.Lock()
+		n.lastRevoked = &revokedLead{
+			agentID: e.AgentID,
+			reason:  e.Reason,
+		}
+		n.mu.Unlock()
+
+	case dispatcher.EvLeaseGranted:
+		n.mu.Lock()
+		prev := n.lastRevoked
+		n.lastRevoked = nil
+		n.mu.Unlock()
+
+		if prev != nil {
+			reasonStr := formatRevokeReason(prev.reason)
+			text := fmt.Sprintf("👑 ĐỔI TRƯỞNG PHÒNG (epoch %d)\n%s ➡️ %s · Lý do: %s",
+				e.Epoch, prev.agentID, e.AgentID, reasonStr)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		}
+
+	case dispatcher.EvLeadVacant:
+		var eta string
+		if e.Until != nil && !e.Until.IsZero() {
+			eta = e.Until.In(n.loc).Format("15:04")
+		} else {
+			eta = "chưa rõ"
+		}
+		text := fmt.Sprintf("⚠️ CHƯA CÓ TRƯỞNG PHÒNG\nViệc code vẫn chạy; việc lập kế hoạch/review đang chờ.\nDự kiến có trưởng phòng lại lúc %s.", eta)
+		n.enqueue(notifyItem{
+			chatID: n.adminChatID,
+			text:   text,
+		})
+
+	case dispatcher.EvLeadRestored:
+		n.enqueue(notifyItem{
+			chatID: n.adminChatID,
+			text:   "✅ Đã có trưởng phòng trở lại",
+		})
+
+	case dispatcher.EvJobFailed:
+		text := fmt.Sprintf("🔁 TASK %s THẤT BẠI NHIỀU LẦN\nĐã chuyển về lập lại kế hoạch (REPLAN)", e.TaskID)
+		n.enqueue(notifyItem{
+			chatID: n.adminChatID,
+			text:   text,
+		})
+
+	case dispatcher.EvAgentAuth:
+		if e.AuthStatus == dispatcher.AuthNeeds {
+			var hint string
+			lower := strings.ToLower(e.AgentID)
+			if strings.Contains(lower, "claude") {
+				hint = "chạy `claude` → /login"
+			} else if strings.Contains(lower, "antigravity") {
+				hint = "mở agy và đăng nhập"
+			} else {
+				hint = "đăng nhập CLI"
+			}
+			text := fmt.Sprintf("🔑 %s cần đăng nhập: %s", e.AgentID, hint)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		} else if e.PrevAuthStatus == dispatcher.AuthNeeds && e.AuthStatus == dispatcher.AuthOK {
+			text := fmt.Sprintf("✅ %s đã đăng nhập lại", e.AgentID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		}
+
+	case dispatcher.EvWorkerAuth:
+		if e.AuthStatus == dispatcher.AuthNeeds {
+			text := fmt.Sprintf("🔑 GitHub CLI trên máy %s cần đăng nhập: chạy `gh auth login`", e.WorkerID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		} else if e.PrevAuthStatus == dispatcher.AuthNeeds && e.AuthStatus == dispatcher.AuthOK {
+			text := fmt.Sprintf("✅ GitHub CLI trên máy %s đã đăng nhập lại", e.WorkerID)
+			n.enqueue(notifyItem{
+				chatID: n.adminChatID,
+				text:   text,
+			})
+		}
+
+	default:
+		// Các sự kiện khác bỏ qua theo đặc tả
+	}
+}
+
+func formatRevokeReason(reason string) string {
+	switch reason {
+	case dispatcher.RevokeExhausted:
+		return "hết limit"
+	case dispatcher.RevokeExpired:
+		return "hết hạn lease"
+	case dispatcher.RevokeOffline:
+		return "mất kết nối"
+	case dispatcher.RevokeAdmin:
+		return "Admin thu hồi"
+	case dispatcher.RevokeReleased:
+		return "tự nhường vai"
+	case dispatcher.RevokeAuth:
+		return "mất quyền đăng nhập"
+	default:
+		return reason
+	}
+}
+
+// NotifyNewTask gửi thông báo yêu cầu tính năng mới kèm nút duyệt nhanh.
+func (n *Notifier) NotifyNewTask(taskID string, issue int, title, requester, description string) {
+	descRunes := []rune(description)
+	desc := description
+	if len(descRunes) > 300 {
+		desc = string(descRunes[:300]) + "…"
+	}
+
+	text := fmt.Sprintf("🔔 YÊU CẦU TÍNH NĂNG MỚI #%d\nNgười yêu cầu: @%s\nTiêu đề: %s\nMô tả: %s",
+		issue, requester, title, desc)
+
+	buttons := [][]Button{
+		{
+			{Text: "✅ Phê duyệt & Lập kế hoạch", CallbackData: "task_approve:" + taskID},
+			{Text: "❌ Từ chối", CallbackData: "task_reject:" + taskID},
+		},
+	}
+
+	n.enqueue(notifyItem{
+		chatID:  n.adminChatID,
+		text:    text,
+		buttons: buttons,
+	})
+}
+
+// NotifyQAPassed gửi thông báo task đã đạt QA kèm nút Merge.
+func (n *Notifier) NotifyQAPassed(taskID, title, prURL string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("🎉 QA đạt: %s\nPR: %s", title, prURL)
+	buttons := [][]Button{
+		{
+			{Text: "🔀 Merge", CallbackData: "task_merge:" + taskID},
+		},
+	}
+	n.enqueue(notifyItem{
+		chatID:  n.adminChatID,
+		text:    text,
+		buttons: buttons,
+	})
+}
+
+// ClarifyQ mô tả một câu hỏi làm rõ cần gửi tới Telegram.
+type ClarifyQ struct {
+	ID          string
+	Question    string
+	Options     []string
+	Recommended string
+}
+
+// NotifyClarifyQuestions gửi danh sách câu hỏi làm rõ của một vòng tới admin Telegram.
+func (n *Notifier) NotifyClarifyQuestions(taskID, title string, round int, qs []ClarifyQ) {
+	if n == nil {
+		return
+	}
+	for _, q := range qs {
+		text := fmt.Sprintf("❓ %s — vòng %d\n\n%s", title, round, q.Question)
+		var buttons [][]Button
+		if len(q.Options) > 0 {
+			for idx, opt := range q.Options {
+				label := opt
+				if opt == q.Recommended {
+					label += " (Đề xuất)"
+				}
+				cb := fmt.Sprintf("clarify:%s:%d:%s:%d", taskID, round, q.ID, idx)
+				buttons = append(buttons, []Button{{Text: label, CallbackData: cb}})
+			}
+		} else {
+			text += "\n\n(Trả lời trên web hoặc GitHub)"
+		}
+		n.enqueue(notifyItem{
+			chatID:  n.adminChatID,
+			text:    text,
+			buttons: buttons,
+		})
+	}
+}
+
+// NotifyClarifyReminder gửi thông báo nhắc nhở làm rõ khi chưa được trả lời sau 24h hoặc 72h.
+func (n *Notifier) NotifyClarifyReminder(taskID, title string, hours int) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⏰ NHẮC LÀM RÕ (%dh)\nTask: %s\nChưa có câu trả lời sau %d giờ.", hours, title, hours)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}
+
+// NotifyClarifyCapped gửi thông báo khi task đã hết lượt hỏi làm rõ (vượt quá 3 vòng).
+func (n *Notifier) NotifyClarifyCapped(taskID, title string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("🛑 HẾT LƯỢT LÀM RÕ (3 vòng)\nTask: %s\nĐã chuyển về lập lại kế hoạch (REPLAN).", title)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}
+
+// NotifyProposal gửi thông báo đề xuất huỷ của trưởng phòng tới admin chat kèm nút Đồng ý huỷ và Từ chối.
+func (n *Notifier) NotifyProposal(taskID, title, proposalID, reason string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⚠️ TRƯỞNG PHÒNG ĐỀ XUẤT HUỶ\nTask: %s\nLý do: %s", title, reason)
+	buttons := [][]Button{
+		{
+			{Text: "Đồng ý huỷ", CallbackData: fmt.Sprintf("proposal_accept:%s:%s", taskID, proposalID)},
+			{Text: "Từ chối", CallbackData: fmt.Sprintf("proposal_reject:%s:%s", taskID, proposalID)},
+		},
+	}
+	n.enqueue(notifyItem{
+		chatID:  n.adminChatID,
+		text:    text,
+		buttons: buttons,
+	})
+}
+
+// NotifyReplanInvalid gửi thông báo khi kết quả REPLAN từ trưởng phòng không hợp lệ.
+func (n *Notifier) NotifyReplanInvalid(taskID, title string) {
+	if n == nil {
+		return
+	}
+	text := fmt.Sprintf("⚠️ KẾ HOẠCH KHÔNG HỢP LỆ\nTask: %s\nKết quả REPLAN từ trưởng phòng không hợp lệ.", title)
+	n.enqueue(notifyItem{
+		chatID: n.adminChatID,
+		text:   text,
+	})
+}

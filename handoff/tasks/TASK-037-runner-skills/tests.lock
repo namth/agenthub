@@ -1,0 +1,3 @@
+fc0f6aa04952466f4858a5e90847c7b50028d8dfa0fa4fab133c743349c3363e  handoff/tasks/TASK-037-runner-skills/verify.sh
+f97f0915f78008e8bff0ce1565695aa4ee8738014ef5c40458997e09618766a3  internal/runner/skills_test.go
+2435c64fda343710f631896e594fb56d34a5f33adce5611ce9b9f38eea11a699  internal/skills/agenthub-spec/SKILL.md

@@ -1,0 +1,39 @@
+{
+  "id": "TASK-037",
+  "title": "Skill agenthub-spec nhúng runner, job không nhánh chạy trên snapshot repo",
+  "status": "accepted",
+  "conversation_id": "6660ed34-ce46-4f73-ae06-85cb743acc32",
+  "history": [
+    {
+      "at": "2026-11-04T22:02:12",
+      "status": "draft",
+      "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-04T22:04:28",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-medium)"
+    },
+    {
+      "at": "2026-11-04T22:04:54",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-04T22:13:58",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-04T22:15:35",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
+    }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-037-runner-skills/verify.sh",
+    "internal/runner/skills_test.go",
+    "internal/skills/agenthub-spec/SKILL.md"
+  ],
+  "via": "agy"
+}
