@@ -125,7 +125,7 @@
 | TASK-018 | TASK-09 (Chốt chặn CI, Merge → DONE) | accepted |
 | TASK-030 → TASK-035 | FEAT-06 + FEAT-02 bản 2 (030/031/032/033 máy chính, 034/035 macbook) | accepted |
 | TASK-036 → TASK-047 | FEAT-07 → FEAT-10 (036/037/038/040/041/043/048 máy chính; 039/042/044/045/046/047 macbook) | accepted |
-| TASK-048 | REPLAN/UNBLOCK có hành động | in_progress |
+| TASK-048 | REPLAN/UNBLOCK có hành động | done |
 
 ---
 
@@ -149,7 +149,7 @@ DoD chi tiết ở §9 của [clarification-and-shared-skills.md](features/clari
 - [x] **TASK-045: Lệnh Telegram cho owner (`/new`, `/tasks`, `/status`, Merge, đề xuất huỷ)** — TC-90, TC-91
 - [x] **TASK-046: Token cá nhân + MCP `/mcp` + SCR-12 Hồ sơ** — TC-92, TC-93
 - [x] **TASK-047: Web responsive 375px** — TC-96
-- [ ] **TASK-048: REPLAN/UNBLOCK có hành động + `lead_proposals`** — TC-94, TC-95
+- [x] **TASK-048: REPLAN/UNBLOCK có hành động + `lead_proposals`** — TC-94, TC-95
 
 **Thứ tự & phạm vi file:** TASK-036 → (041 `internal/projects`+`internal/runner` exec ∥ 043 `internal/dispatcher` ∥ 037 `internal/skills`+`internal/runner` worktree) — 041 và 037/042 cùng `internal/runner` nên chạy nối tiếp nhau → 042 → 044 → 038 → 039 ∥ 040 → 045 ∥ 046 ∥ 047 → 048.
 

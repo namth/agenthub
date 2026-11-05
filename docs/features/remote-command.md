@@ -1,6 +1,6 @@
 # FEAT-10: Điều hành từ mọi nơi (Telegram, MCP, điện thoại) & trưởng phòng AI xử lý kẹt
 
-> Trạng thái: SPEC_APPROVED (2026-11-04) · Quyết định: DEC-39, DEC-40
+> Trạng thái: DONE (2026-11-05) · Quyết định: DEC-39, DEC-40
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS lead_proposals (                -- đề xuất huỷ
 | **BR-61** | Bot chỉ nhận lệnh từ `TELEGRAM_ADMIN_CHAT_ID`; tin từ chat khác bị bỏ qua (không trả lời). Lệnh thực hiện với danh tính owner, cùng service với web (không đường tắt bỏ RBAC/validate). |
 | **BR-62** | Token cá nhân: 32 byte `crypto/rand`, tiền tố `ahp_`, lưu SHA-256; hết hạn bắt buộc (≤ 365 ngày); tối đa 10 token còn hiệu lực/người; `last_used_at` ghi tối đa 1 lần/phút. Token không dùng được cho cookie web hay WebSocket runner. |
 | **BR-63** | `/mcp` đợt này chỉ chấp nhận token của owner (DEC-39); mọi tool đi qua cùng service/RBAC với REST; giới hạn 60 lời gọi/phút/token (`429`). Nội dung trả về đã qua bộ che secret (BR-20). |
-| **BR-64** | `REPLAN`/`UNBLOCK` (job `lead_only`, fencing `epoch`): `retry` → ghi `note` vào `lead_journal`, job CODE mới cùng nhánh, `attempt` về 1; `replan` → sub-task chưa `DONE` chuyển `REJECTED` (đóng issue con kèm lý do), tạo sub-task mới như SPEC, task cha `READY`; `ask_user` → như `NEED_INFO` (FEAT-07); `cancel` → tạo `lead_proposals` PENDING, báo owner, **không** tự huỷ. Kết quả sai schema → giữ hành vi cũ (Telegram báo owner, không lặp REPLAN quá 2 lần cho cùng task trong 24h). |
+| **BR-64** | `REPLAN`/`UNBLOCK` (job `lead_only`, fencing `epoch`): `retry` → ghi `note` vào `lead_journal`, job CODE mới cùng nhánh, `attempt` về 1; `replan` → sub-task chưa `DONE` chuyển `REJECTED` (đóng issue con kèm lý do), tạo sub-task mới như SPEC, task cha `READY`; `ask_user` → như `NEED_INFO` (FEAT-07); `cancel` → tạo `lead_proposals` PENDING, báo owner, **không** tự huỷ. Kết quả sai schema → giữ hành vi cũ (Telegram báo owner, không lặp REPLAN quá 2 lần cho cùng task trong 24h). Đề xuất chỉ được quyết một lần (cập nhật có điều kiện `status='PENDING'`); lần quyết sau, kể cả hai Admin bấm cùng lúc → `409 INVALID_TRANSITION`. |
 | **BR-65** | Giao diện điện thoại: mọi thao tác chính (duyệt, trả lời, merge, xác nhận đề xuất, tạm dừng máy) dùng được ở 375×667 không cần cuộn ngang trang (trừ Kanban và văn phòng cuộn trong khung). |
 
 ## 8. Test case
