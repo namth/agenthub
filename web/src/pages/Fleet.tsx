@@ -17,6 +17,7 @@ export interface LeadState {
 
 export interface Agent {
   id: string;
+  name?: string;
   kind: 'CLAUDE' | 'ANTIGRAVITY';
   status: 'IDLE' | 'BUSY' | 'COOLDOWN';
   cooldown_until: string | null;
@@ -212,6 +213,19 @@ export default function Fleet() {
       } else {
         setActionError('Lỗi khi cập nhật quyền trưởng phòng');
       }
+    }
+  };
+
+  const handleDeleteAgent = async (agentId: string) => {
+    if (!window.confirm(`Xoá tài khoản ${agentId} khỏi hub? Máy sẽ không tự đăng ký lại.`)) return;
+    setActionError(null);
+    try {
+      await api.del(`/api/admin/agents/${encodeURIComponent(agentId)}`);
+      await fetchFleet();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) setActionError(err.message || err.code);
+      else if (err instanceof Error) setActionError(err.message);
+      else setActionError('Lỗi khi xoá agent');
     }
   };
 
@@ -540,6 +554,7 @@ export default function Fleet() {
                                 kind={agent.kind}
                                 auth_status={agent.auth_status}
                                 auth_detail={agent.auth_detail}
+                                name={agent.name ?? agent.id.split('/').pop()}
                               />
                             </div>
 
@@ -592,8 +607,17 @@ export default function Fleet() {
                             </div>
                           </div>
 
-                          {canAssign && (
-                            <div className="mt-1 flex justify-end">
+                          <div className="mt-1 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              disabled={agent.status === 'BUSY' || !!agent.current_job}
+                              title={agent.status === 'BUSY' || agent.current_job ? 'Đang chạy việc' : 'Xoá tài khoản agent khỏi hub'}
+                              onClick={() => handleDeleteAgent(agent.id)}
+                              className="rounded border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Xoá
+                            </button>
+                            {canAssign && (
                               <button
                                 type="button"
                                 onClick={() => handleAssign(agent.id)}
@@ -601,8 +625,8 @@ export default function Fleet() {
                               >
                                 Trao vai
                               </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       );
                     })}

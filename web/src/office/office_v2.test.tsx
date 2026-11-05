@@ -1,5 +1,6 @@
 // Test nghiệm thu TASK-035 — do trưởng phòng viết, file bị khoá (tests.lock).
 // Đặc tả: docs/features/virtual-office.md bản 2 §4 (bố cục), §7 BR-43 → BR-46; TC-33 (sửa), TC-34, TC-71 → TC-73.
+// Sửa 2026-11-05 theo DEC-44 (bản 3): bỏ "tối thiểu 8 bàn / ghế trống" — chỉ vẽ bàn cho agent có thật.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { applyEvent, computeLayout, initialState, type Rect, type Snapshot } from './model';
@@ -25,13 +26,9 @@ const seatOf = (l: ReturnType<typeof computeLayout>, agentId: string) => l.seats
 // ---------- bố cục khu làm việc (TC-33 sửa, BR-43) ----------
 
 describe('computeLayout bản 2', () => {
-  it('0 máy: đủ 8 bàn trống, 2 cụm × 2 hàng × 2 bàn', () => {
+  it('0 máy: không có bàn nào (DEC-44)', () => {
     const l = computeLayout([], []);
-    expect(l.seats.length).toBe(8);
-    expect(l.seats.every((s) => s.agentId === null && s.workerId === null)).toBe(true);
-    expect(l.seats.filter((s) => s.cluster === 'left').length).toBe(4);
-    expect(l.seats.filter((s) => s.cluster === 'right').length).toBe(4);
-    expect(new Set(l.seats.map((s) => `${s.cluster}-${s.row}-${s.col}`)).size).toBe(8);
+    expect(l.seats.length).toBe(0);
   });
 
   it('thứ tự trái-1 → phải-1 → trái-2 → phải-2, máy sắp theo tên, claude trước agy', () => {
@@ -46,12 +43,11 @@ describe('computeLayout bản 2', () => {
     expect(l.machineLabels.map((m) => m.workerId).sort()).toEqual(['Bb', 'aa', 'cc', 'dd'].sort());
   });
 
-  it('1 máy 1 agent: bàn thứ hai của hàng để trống', () => {
+  it('1 máy 1 agent: đúng 1 bàn, không vẽ bàn trống bên cạnh (DEC-44)', () => {
     const l = computeLayout([mk('solo', ['ANTIGRAVITY'])], []);
     const s = seatOf(l, 'solo/antigravity');
     expect(`${s.cluster}-${s.row}-${s.col}`).toBe('left-0-0');
-    const mate = l.seats.find((x) => x.cluster === 'left' && x.row === 0 && x.col === 1)!;
-    expect(mate.agentId).toBeNull();
+    expect(l.seats.length).toBe(1);
   });
 
   it('5 máy: cụm trái 3 hàng, phải 2 hàng (10 bàn); 9 máy: 5 + 4 hàng (18 bàn); canvas cao dần', () => {
@@ -201,12 +197,12 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const page = () => render(<MemoryRouter><Office /></MemoryRouter>);
 
 describe('SCR-08 bản 2', () => {
-  it('vẽ đủ 8 ghế (ghế trống đánh dấu), khu chỉ huy có bàn theo người, 🔑 cho agent NEEDS_AUTH', () => {
+  it('chỉ vẽ ghế cho agent có thật (DEC-44), khu chỉ huy có bàn theo người, 🔑 cho agent NEEDS_AUTH', () => {
     page();
     act(() => FakeES.last!.emit('snapshot', snap2));
     const seats = screen.getAllByTestId(/^seat-\d+$/);
-    expect(seats.length).toBe(8);
-    expect(seats.filter((s) => s.getAttribute('data-empty') === 'true').length).toBe(5);
+    expect(seats.length).toBe(3);
+    expect(seats.filter((s) => s.getAttribute('data-empty') === 'true').length).toBe(0);
     expect(screen.getByTestId('user-namth').getAttribute('data-online')).toBe('true');
     expect(screen.getByTestId('user-an').getAttribute('data-online')).toBe('false');
     expect(screen.getByTestId('user-an').textContent).toContain('an');

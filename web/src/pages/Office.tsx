@@ -30,6 +30,8 @@ export default function Office() {
   } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Bản 3 (DEC-44): canvas vẽ ở độ phân giải thật = logic × 2 × devicePixelRatio → chữ nét.
+  const pxScale = Math.max(2, Math.round(2 * (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)));
   const animRef = useRef<AnimState>(createAnimState());
   const isInitialSnap = useRef(true);
 
@@ -227,15 +229,15 @@ export default function Office() {
         <canvas
           ref={canvasRef}
           data-testid="office-canvas"
-          width={layout?.width ?? 480}
-          height={layout?.height ?? 260}
+          width={(layout?.width ?? 480) * pxScale}
+          height={(layout?.height ?? 260) * pxScale}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           className="block max-w-full rounded"
           style={{
-            imageRendering: 'pixelated',
             width: (layout?.width ?? 480) * 2,
-            height: (layout?.height ?? 260) * 2,
+            maxWidth: '100%',
+            height: 'auto',
           }}
         />
 
@@ -356,10 +358,13 @@ export default function Office() {
                   data-online={String(isOnline)}
                   style={{
                     position: 'absolute',
-                    left: `${(ud.x / layout.width) * 100}%`,
-                    top: `${(ud.y / layout.height) * 100}%`,
-                    fontSize: '11px',
-                    lineHeight: '14px',
+                    left: `${((layout.zones.command.x + 6) / layout.width) * 100}%`,
+                    top: `${((ud.y + ud.h + 1) / layout.height) * 100}%`,
+                    maxWidth: `${((layout.zones.command.w - 10) / layout.width) * 100}%`,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    fontSize: '10px',
+                    lineHeight: '13px',
                     fontWeight: 600,
                     color: isOnline ? '#f8fafc' : '#cbd5e1',
                     background: isOnline ? 'rgba(30, 27, 46, 0.85)' : 'rgba(30, 27, 46, 0.55)',

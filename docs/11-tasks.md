@@ -157,11 +157,11 @@ DoD chi tiết ở §9 của [clarification-and-shared-skills.md](features/clari
 | :--- | :--- | :--- |
 | TASK-049 | Server: migration 006, HELLO theo `name`/`ever_ok`, xoá agent + `AGENT_REMOVE` | todo |
 | TASK-050 | Runner: `agents.json`, `agenthub account …`, `install.sh` chỉ ghi CLI đã OK | todo |
-| TASK-051 | Web: xoá agent SCR-05/SCR-11 + văn phòng bản 3 | todo |
+| TASK-051 | Web: xoá agent SCR-05/SCR-11 + văn phòng bản 3 | done (trưởng phòng tự làm: agy máy chính hết hạn mức tới 08/11, macbook đang chạy 049/050) |
 
 - [ ] **TASK-049** — TC-97 → TC-100 · `go test ./internal/... -race`
 - [ ] **TASK-050** — TC-101, TC-102 · `go test ./internal/runner ./internal/machines -race`
-- [ ] **TASK-051** — TC-103 + `web/src/office/office_v3.test.tsx` · `cd web && npx vitest run && npx tsc -b --noEmit && npm run build`, ảnh chụp `/office` thật
+- [x] **TASK-051** — TC-103 + `web/src/office/office_v3.test.tsx` · `cd web && npx vitest run && npx tsc -b --noEmit && npm run build`, ảnh chụp `/office` thật
 
 **Thứ tự:** 049 ∥ 050 (giao thức HELLO/`AGENT_REMOVE` chốt trong [features/agent-accounts.md](features/agent-accounts.md) §6) → 051. DoD ở §9 của file đó và [features/virtual-office.md](features/virtual-office.md) §10.
 

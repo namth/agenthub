@@ -83,6 +83,7 @@ export type UserDesk = Rect & {
 
 export type Zones = {
   backWall: Rect;
+  window: Rect;
   logo: Rect;
   board: Rect;
   leadDesk: Rect;
@@ -91,6 +92,8 @@ export type Zones = {
   command: Rect;
   commandDoor: Rect;
   breakRoom: Rect;
+  beds: Rect[];
+  sofa: Rect;
   lobby: Rect;
   lobbyRug: Rect;
 };
@@ -101,10 +104,17 @@ function getAgentPriority(kind: string): number {
   return 3;
 }
 
+// Bản 3 (DEC-44): mỗi chỗ ngồi = bàn gọn (14) + ghế (phía dưới); hàng cách nhau 48.
+export const SEAT_TOP = 104;
+export const SEAT_PITCH = 48;
+export const SEAT_W = 52;
+export const SEAT_H = 30;
+export const DESK_H = 14;
+
 function getSeatRect(cluster: 'left' | 'right', row: number, col: 0 | 1): Rect {
-  const x = cluster === 'left' ? (col === 0 ? 24 : 96) : (col === 0 ? 208 : 280);
-  const y = 80 + row * 44;
-  return { x, y, w: 56, h: 26 };
+  const x = cluster === 'left' ? (col === 0 ? 20 : 88) : col === 0 ? 220 : 288;
+  const y = SEAT_TOP + row * SEAT_PITCH;
+  return { x, y, w: SEAT_W, h: SEAT_H };
 }
 
 export function computeLayout(
@@ -130,135 +140,71 @@ export function computeLayout(
   const machineLabels: { workerId: string; x: number; y: number }[] = [];
 
   for (const w of sortedWorkers) {
+    // Chỉ agent có thật (DEC-44): máy không có agent thì không chiếm hàng.
+    if (w.agents.length === 0) continue;
     const sortedAgents = [...w.agents].sort(
       (a, b) =>
         getAgentPriority(a.kind) - getAgentPriority(b.kind) ||
         a.id.localeCompare(b.id)
     );
 
-    const rowsNeeded = Math.max(1, Math.ceil(sortedAgents.length / 2));
+    const rowsNeeded = Math.ceil(sortedAgents.length / 2);
     const cluster: 'left' | 'right' = leftNextRow <= rightNextRow ? 'left' : 'right';
     const startRow = cluster === 'left' ? leftNextRow : rightNextRow;
+    if (cluster === 'left') leftNextRow += rowsNeeded;
+    else rightNextRow += rowsNeeded;
 
-    if (cluster === 'left') {
-      leftNextRow += rowsNeeded;
-    } else {
-      rightNextRow += rowsNeeded;
-    }
-
-    for (let r = 0; r < rowsNeeded; r++) {
-      const currentRow = startRow + r;
-      const a0 = sortedAgents[r * 2] ?? null;
-      const a1 = sortedAgents[r * 2 + 1] ?? null;
-
-      const r0 = getSeatRect(cluster, currentRow, 0);
+    sortedAgents.forEach((a, i) => {
+      const row = startRow + Math.floor(i / 2);
+      const col = (i % 2) as 0 | 1;
       seats.push({
-        ...r0,
+        ...getSeatRect(cluster, row, col),
         index: seats.length,
         cluster,
-        row: currentRow,
-        col: 0,
-        agentId: a0 ? a0.id : null,
-        workerId: a0 ? w.id : null,
+        row,
+        col,
+        agentId: a.id,
+        workerId: w.id,
       });
-
-      const r1 = getSeatRect(cluster, currentRow, 1);
-      seats.push({
-        ...r1,
-        index: seats.length,
-        cluster,
-        row: currentRow,
-        col: 1,
-        agentId: a1 ? a1.id : null,
-        workerId: a1 ? w.id : null,
-      });
-    }
+    });
 
     machineLabels.push({
       workerId: w.id,
-      x: cluster === 'left' ? 24 : 208,
-      y: 80 + startRow * 44 + 28,
+      x: cluster === 'left' ? 20 : 220,
+      y: SEAT_TOP + startRow * SEAT_PITCH + SEAT_H + 1,
     });
   }
 
-  // Minimum 2 rows per cluster
-  const leftTotalRows = Math.max(2, leftNextRow);
-  const rightTotalRows = Math.max(2, rightNextRow);
+  const maxSeatRows = Math.max(leftNextRow, rightNextRow);
+  const seatsBottom = SEAT_TOP + maxSeatRows * SEAT_PITCH - 10;
 
-  for (let r = leftNextRow; r < leftTotalRows; r++) {
-    const r0 = getSeatRect('left', r, 0);
-    seats.push({
-      ...r0,
-      index: seats.length,
-      cluster: 'left',
-      row: r,
-      col: 0,
-      agentId: null,
-      workerId: null,
-    });
-    const r1 = getSeatRect('left', r, 1);
-    seats.push({
-      ...r1,
-      index: seats.length,
-      cluster: 'left',
-      row: r,
-      col: 1,
-      agentId: null,
-      workerId: null,
-    });
-  }
+  // Khu chỉ huy: bàn gọn, cách nhau 24 px (≥ 1 ô), người ngồi sau bàn quay mặt ra.
+  const userStartY = 70;
+  const userDeskStep = 40;
+  const userDeskH = 16;
+  const usersBottom = users.length > 0 ? userStartY + users.length * userDeskStep + 4 : 0;
 
-  for (let r = rightNextRow; r < rightTotalRows; r++) {
-    const r0 = getSeatRect('right', r, 0);
-    seats.push({
-      ...r0,
-      index: seats.length,
-      cluster: 'right',
-      row: r,
-      col: 0,
-      agentId: null,
-      workerId: null,
-    });
-    const r1 = getSeatRect('right', r, 1);
-    seats.push({
-      ...r1,
-      index: seats.length,
-      cluster: 'right',
-      row: r,
-      col: 1,
-      agentId: null,
-      workerId: null,
-    });
-  }
-
-  // Re-assign continuous indices
-  seats.forEach((s, idx) => {
-    s.index = idx;
-  });
-
-  const maxSeatRows = Math.max(leftTotalRows, rightTotalRows);
-  const seatsBottom = 80 + maxSeatRows * 44 + 16;
-  const userStartY = 56;
-  const userDeskStep = 26;
-  const userDeskH = 22;
-  const usersBottom =
-    users.length > 0 ? userStartY + users.length * userDeskStep + 10 : 0;
-
-  const baseBottomY = 196;
+  const baseBottomY = 200;
   const bottomY = Math.max(baseBottomY, seatsBottom, usersBottom);
   const bottomH = 64;
   const height = bottomY + bottomH;
 
+  const breakRoom = { x: 0, y: bottomY, w: 240, h: bottomH };
+  const beds: Rect[] = [0, 1, 2].map((i) => ({ x: 10 + i * 54, y: bottomY + 30, w: 44, h: 24 }));
+
   const zones: Zones = {
     backWall: { x: 0, y: 0, w: width, h: 48 },
-    logo: { x: 180, y: 8, w: 120, h: 32 },
-    board: { x: 16, y: 8, w: 130, h: 32 },
-    leadDesk: { x: 170, y: 46, w: 60, h: 26 },
+    board: { x: 10, y: 8, w: 84, h: 32 },
+    window: { x: 120, y: 5, w: 120, h: 38 },
+    logo: { x: 256, y: 9, w: 96, h: 30 },
+    leadDesk: { x: 150, y: 60, w: 60, h: 20 },
     work: { x: 0, y: 0, w: 360, h: bottomY },
-    aisle: { x: 166, y: 72, w: 28, h: bottomY - 72 },
+    aisle: { x: 160, y: 84, w: 40, h: bottomY - 84 },
     command: { x: 360, y: 0, w: 120, h: bottomY },
-    commandDoor: { x: 356, y: 52, w: 8, h: 24 },
-    breakRoom: { x: 0, y: bottomY, w: 240, h: bottomH },
+    commandDoor: { x: 356, y: 52, w: 8, h: 28 },
+    breakRoom,
+    beds,
+    sofa: { x: 176, y: bottomY + 34, w: 56, h: 18 },
     lobby: { x: 240, y: bottomY, w: 240, h: bottomH },
     lobbyRug: { x: 290, y: bottomY + 12, w: 90, h: 40 },
   };
@@ -267,9 +213,9 @@ export function computeLayout(
     login: u.login,
     isOwner: u.is_owner,
     online: u.online,
-    x: 375,
+    x: 392,
     y: userStartY + i * userDeskStep,
-    w: 90,
+    w: 60,
     h: userDeskH,
   }));
 

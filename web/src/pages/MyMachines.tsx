@@ -13,6 +13,7 @@ export interface AgentJob {
 
 export interface MachineAgent {
   id: string;
+  name?: string;
   kind: string;
   status: string;
   projects?: string[];
@@ -129,6 +130,20 @@ export default function MyMachines() {
       } else {
         setActionError('Lỗi khi cập nhật trạng thái tạm dừng');
       }
+    }
+  };
+
+  const handleDeleteAgent = async (m: Machine, agent: MachineAgent) => {
+    const name = agent.name ?? agent.id.split('/').pop() ?? '';
+    if (!window.confirm(`Xoá tài khoản ${agent.id} khỏi hub? Máy sẽ không tự đăng ký lại.`)) return;
+    setActionError(null);
+    try {
+      await api.del(`/api/my/machines/${m.id}/agents/${encodeURIComponent(name)}`);
+      await fetchData();
+    } catch (err: unknown) {
+      if (err instanceof ApiError) setActionError(err.message || err.code);
+      else if (err instanceof Error) setActionError(err.message);
+      else setActionError('Lỗi khi xoá agent');
     }
   };
 
@@ -345,10 +360,17 @@ export default function MyMachines() {
             </div>
 
             {/* Agents */}
+            {m.agents.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                Chưa có tài khoản agent — chạy <code className="font-mono">agenthub account add claude</code> (hoặc{' '}
+                <code className="font-mono">antigravity</code>) trên máy này sau khi đã đăng nhập CLI.
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {m.agents.map((agent) => (
                 <div
                   key={agent.id}
+                  data-testid={`my-agent-${agent.id}`}
                   className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-1.5"
                 >
                   <div className="flex items-center justify-between">
@@ -373,6 +395,7 @@ export default function MyMachines() {
                     kind={agent.kind}
                     auth_status={agent.auth_status}
                     auth_detail={agent.auth_detail}
+                    name={agent.name ?? agent.id.split('/').pop()}
                   />
 
                   {agent.auth_status === 'NEEDS_AUTH' && (
@@ -387,6 +410,17 @@ export default function MyMachines() {
                       </button>
                     </div>
                   )}
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      disabled={agent.status === 'BUSY' || !!agent.current_job}
+                      title={agent.status === 'BUSY' || agent.current_job ? 'Đang chạy việc' : 'Xoá tài khoản agent khỏi hub'}
+                      onClick={() => handleDeleteAgent(m, agent)}
+                      className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Xoá
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

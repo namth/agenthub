@@ -2,9 +2,10 @@ export interface AuthBadgeProps {
   kind?: string;
   auth_status?: string | null;
   auth_detail?: string | null;
+  name?: string | null; // tên tài khoản agent (FEAT-11) → gợi ý `agenthub account login <name>`
 }
 
-export default function AuthBadge({ kind, auth_status, auth_detail }: AuthBadgeProps) {
+export default function AuthBadge({ kind, auth_status, auth_detail, name }: AuthBadgeProps) {
   if (auth_status === 'OK') {
     return null;
   }
@@ -26,6 +27,11 @@ export default function AuthBadge({ kind, auth_status, auth_detail }: AuthBadgeP
         <div className="text-xs text-red-600 font-mono">
           {hint}
         </div>
+        {name && (
+          <div className="text-xs text-red-600">
+            hoặc trên máy đó: <code className="font-mono">agenthub account login {name}</code>
+          </div>
+        )}
       </div>
     );
   }
