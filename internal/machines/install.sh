@@ -108,13 +108,14 @@ fi
 chmod +x "$TARGET_BIN"
 
 # Phát hiện agent và kiểm tra đăng nhập
+# stdin của probe phải là /dev/null: script chạy kiểu `curl … | sh` nên stdin chính là phần còn lại của script.
 run_probe() {
     if command -v timeout >/dev/null 2>&1; then
-        timeout 60 "$@" >/dev/null 2>&1
+        timeout 60 "$@" </dev/null >/dev/null 2>&1
     elif command -v gtimeout >/dev/null 2>&1; then
-        gtimeout 60 "$@" >/dev/null 2>&1
+        gtimeout 60 "$@" </dev/null >/dev/null 2>&1
     else
-        "$@" >/dev/null 2>&1
+        "$@" </dev/null >/dev/null 2>&1
     fi
 }
 
