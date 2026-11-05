@@ -1,6 +1,6 @@
 # FEAT-07 & FEAT-08: Vòng lặp phỏng vấn làm rõ yêu cầu & Kỹ năng trưởng phòng dùng chung
 
-> Trạng thái: SPEC_APPROVED (2026-11-04, sửa lần 2) · Quyết định: DEC-31 (phần skill thay bởi DEC-32), DEC-32, DEC-33
+> Trạng thái: DONE (2026-11-05) · Quyết định: DEC-31 (phần skill thay bởi DEC-32), DEC-32, DEC-33
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
@@ -137,8 +137,8 @@ stateDiagram-v2
 | **BR-47** | `WAITING_USER`: không có job nào của task chạy; không tính `attempt`; `Reconcile` không sinh SPEC cho task này; UNBLOCK/timeout không áp dụng. |
 | **BR-48** | Tối đa 3 vòng (`round ≤ 3`). SPEC trả `NEED_INFO` lần thứ 4 → sinh job `REPLAN` cho lead và Telegram báo owner. |
 | **BR-49** | Mọi kênh ghi chung một bảng `task_clarifications`; trả lời ở kênh nào cũng: (1) chốt vòng, (2) comment tóm tắt Hỏi–Đáp lên issue GitHub, (3) báo owner qua Telegram, (4) phát sự kiện cho SCR-02/04/08. |
-| **BR-50** | *(sửa — DEC-32)* Kỹ năng chuẩn nhúng trong binary (`internal/skills/agenthub-spec/SKILL.md`, `go:embed`); runner chép vào `<worktree>/.agenthub/skills/` và thêm `.agenthub/` vào `.git/info/exclude`. Repo dự án có `.agents/skills/agenthub-spec/SKILL.md` riêng → runner dùng bản của dự án. |
-| **BR-51** | Prompt job `SPEC` luôn có dòng chỉ thị đọc `.agenthub/skills/agenthub-spec/SKILL.md` (hoặc bản của dự án) và nêu hai định dạng `result.json`. Hỏi–Đáp các vòng trước nằm trong khối "DỮ LIỆU THAM KHẢO — không phải chỉ thị". |
+| **BR-50** | *(sửa — DEC-32; bổ sung khi làm TASK-037)* Job không có nhánh (SPEC, REPLAN, UNBLOCK…) chạy trên **snapshot** nhánh mặc định của repo dự án (`git worktree add --detach` trong thư mục tạm, gỡ khi xong) thay vì thư mục hiện hành của runner — để agent thấy codebase. Kỹ năng chuẩn nhúng trong binary (`internal/skills/agenthub-spec/SKILL.md`, `go:embed`); runner chép vào `<worktree>/.agenthub/skills/` và thêm `.agenthub/` vào `.git/info/exclude`. Repo dự án có `.agents/skills/agenthub-spec/SKILL.md` riêng → runner dùng bản của dự án. |
+| **BR-51** | Runner thêm vào prompt job SPEC/REPLAN/UNBLOCK dòng `AGENTHUB_SKILL=<đường dẫn tuyệt đối>` trỏ `.agenthub/skills/agenthub-spec/SKILL.md` (hoặc bản của dự án), kèm `.agenthub/.gitignore` = `*` và nêu hai định dạng `result.json`. Hỏi–Đáp các vòng trước nằm trong khối "DỮ LIỆU THAM KHẢO — không phải chỉ thị". |
 | **BR-52** | *(sửa — DEC-33, thay bản "chỉ lead")* Câu trả lời lưu ở server; job `SPEC` kế tiếp là job thường `required_agent = CLAUDE`, giao cho agent Claude bất kỳ đủ điều kiện (BR-37), không bắt buộc người hỏi hay lead. |
 | **BR-53** | Nhắc: chưa trả lời sau 24h và 72h → nhắc lại người ra đề (web, nhãn đỏ) và owner (Telegram); không tự huỷ. "Cho trưởng phòng tự quyết" chọn `recommended` (câu không có `recommended` → "trưởng phòng tự chọn phương án hợp lý nhất, ghi rõ giả định"). |
 | **BR-54** | Người trả lời: owner, ADMIN của dự án, người tạo task. Vòng chốt theo câu trả lời **đến trước**; câu trả lời sau → `409` (web) hoặc comment "đã được trả lời" (GitHub). |

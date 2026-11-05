@@ -1,6 +1,6 @@
 # FEAT-09: Vận hành thật & an toàn đa partner
 
-> Trạng thái: SPEC_APPROVED (2026-11-04) · Quyết định: DEC-34, DEC-35, DEC-36, DEC-37, DEC-38
+> Trạng thái: DONE (2026-11-05) · Quyết định: DEC-34, DEC-35, DEC-36, DEC-37, DEC-38
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
