@@ -179,3 +179,11 @@ func (c *TelegramCommander) PickOption(ctx context.Context, taskID string, round
 	}
 	return c.svc.PickOption(ctx, userID, taskID, round, questionID, optionIdx)
 }
+
+func (c *TelegramCommander) DecideProposal(ctx context.Context, taskID, proposalID string, accept bool) error {
+	userID, err := c.getOwnerUserID(ctx)
+	if err != nil {
+		return err
+	}
+	return c.svc.DecideProposal(ctx, userID, "ADMIN", taskID, proposalID, accept)
+}

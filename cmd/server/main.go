@@ -229,6 +229,20 @@ func main() {
 				tg.NotifyClarifyCapped(taskID, title)
 			}
 		}),
+		pipeline.WithOnProposal(func(taskID, proposalID, reason string) {
+			if tg != nil {
+				var title string
+				_ = db.QueryRow(`SELECT title FROM tasks WHERE id = ?`, taskID).Scan(&title)
+				tg.NotifyProposal(taskID, title, proposalID, reason)
+			}
+		}),
+		pipeline.WithOnReplanInvalid(func(taskID string) {
+			if tg != nil {
+				var title string
+				_ = db.QueryRow(`SELECT title FROM tasks WHERE id = ?`, taskID).Scan(&title)
+				tg.NotifyReplanInvalid(taskID, title)
+			}
+		}),
 	}
 	if multi {
 		plOpts = append(plOpts, pipeline.WithGitHubFor(clients.GitHubOrNil))

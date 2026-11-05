@@ -34,6 +34,11 @@ type Clarifier interface {
 	PickOption(ctx context.Context, taskID string, round int, questionID string, optionIdx int) (bool, error)
 }
 
+// ProposalDecider thực hiện xác nhận hoặc từ chối đề xuất huỷ từ Telegram.
+type ProposalDecider interface {
+	DecideProposal(ctx context.Context, taskID, proposalID string, accept bool) error
+}
+
 // ErrNotFound trả về khi không tìm thấy dự án hoặc task.
 var ErrNotFound = errors.New("NOT_FOUND")
 
@@ -136,6 +141,39 @@ func WebhookHandlerWith(s Sender, a Approver, c Commander, adminChatID, secret s
 					_ = s.AnswerCallback(ctx, cb.ID, "Đã gửi cho trưởng phòng")
 				} else {
 					_ = s.AnswerCallback(ctx, cb.ID, "Đã ghi")
+				}
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			if strings.HasPrefix(cb.Data, "proposal_accept:") || strings.HasPrefix(cb.Data, "proposal_reject:") {
+				decider, ok := c.(ProposalDecider)
+				if !ok || decider == nil {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				accept := strings.HasPrefix(cb.Data, "proposal_accept:")
+				var rest string
+				if accept {
+					rest = strings.TrimPrefix(cb.Data, "proposal_accept:")
+				} else {
+					rest = strings.TrimPrefix(cb.Data, "proposal_reject:")
+				}
+				parts := strings.Split(rest, ":")
+				if len(parts) != 2 {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				taskID := parts[0]
+				pid := parts[1]
+				ctx := r.Context()
+				err := decider.DecideProposal(ctx, taskID, pid, accept)
+				if err != nil {
+					_ = s.AnswerCallback(ctx, cb.ID, fmt.Sprintf("Không thực hiện được: %v", err))
+				} else if accept {
+					_ = s.AnswerCallback(ctx, cb.ID, "Đã đồng ý huỷ")
+				} else {
+					_ = s.AnswerCallback(ctx, cb.ID, "Đã từ chối huỷ")
 				}
 				w.WriteHeader(http.StatusOK)
 				return

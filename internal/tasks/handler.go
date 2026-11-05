@@ -95,6 +95,8 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	clarificationsH := handleGetClarifications(s, authz)
 	clarifyH := handleClarify(s, authz)
 	clarifyAutoH := handleClarifyAuto(s, authz)
+	decideProposalAcceptH := handleDecideProposal(s, authz, true)
+	decideProposalRejectH := handleDecideProposal(s, authz, false)
 
 	// Hỗ trợ cả tiền tố /api/tasks và /tasks
 	r.Post("/api/tasks", createH)
@@ -104,6 +106,8 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r.Get("/api/tasks/{id}/clarifications", clarificationsH)
 	r.Post("/api/tasks/{id}/clarify", clarifyH)
 	r.Post("/api/tasks/{id}/clarify/auto", clarifyAutoH)
+	r.Post("/api/tasks/{id}/proposals/{pid}/accept", decideProposalAcceptH)
+	r.Post("/api/tasks/{id}/proposals/{pid}/reject", decideProposalRejectH)
 	r.Get("/api/tasks/{id}", getDetailH)
 	r.Post("/api/tasks/{id}/approve", approveH)
 	r.Post("/api/tasks/{id}/reject", rejectH)
@@ -116,6 +120,8 @@ func HandlerWithService(s *Service, authz Authz) http.Handler {
 	r.Get("/tasks/{id}/clarifications", clarificationsH)
 	r.Post("/tasks/{id}/clarify", clarifyH)
 	r.Post("/tasks/{id}/clarify/auto", clarifyAutoH)
+	r.Post("/tasks/{id}/proposals/{pid}/accept", decideProposalAcceptH)
+	r.Post("/tasks/{id}/proposals/{pid}/reject", decideProposalRejectH)
 	r.Get("/tasks/{id}", getDetailH)
 	r.Post("/tasks/{id}/approve", approveH)
 	r.Post("/tasks/{id}/reject", rejectH)
@@ -666,7 +672,61 @@ func handleGetTaskDetail(s *Service, authz Authz) http.HandlerFunc {
 		}
 
 		taskMap["subtasks"] = subtasksList
+
+		pRows, err := s.db.QueryContext(r.Context(), `
+			SELECT id, kind, reason, proposed_by, status, created_at
+			FROM lead_proposals
+			WHERE task_id = ? AND status = 'PENDING'
+			ORDER BY created_at ASC, id ASC
+		`, taskID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "lỗi truy vấn proposal")
+			return
+		}
+		defer pRows.Close()
+
+		proposalsList := make([]map[string]any, 0)
+		for pRows.Next() {
+			var pid, pkind, preason, pby, pst, pcreated string
+			if err := pRows.Scan(&pid, &pkind, &preason, &pby, &pst, &pcreated); err == nil {
+				proposalsList = append(proposalsList, map[string]any{
+					"id":          pid,
+					"kind":        pkind,
+					"reason":      preason,
+					"proposed_by": pby,
+					"status":      pst,
+					"created_at":  pcreated,
+				})
+			}
+		}
+		taskMap["proposals"] = proposalsList
+
 		writeJSON(w, http.StatusOK, taskMap)
+	}
+}
+
+func handleDecideProposal(s *Service, authz Authz, accept bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, role, ok := authz(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "chưa đăng nhập")
+			return
+		}
+
+		taskID := chi.URLParam(r, "id")
+		proposalID := chi.URLParam(r, "pid")
+		if taskID == "" || proposalID == "" {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "thiếu task ID hoặc proposal ID")
+			return
+		}
+
+		err := s.DecideProposal(r.Context(), userID, role, taskID, proposalID, accept)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
 }
 
