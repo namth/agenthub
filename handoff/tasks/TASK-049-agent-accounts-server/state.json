@@ -1,13 +1,43 @@
 {
   "id": "TASK-049",
   "title": "Server: tài khoản agent linh động (migration 006, HELLO name/ever_ok, xoá agent)",
-  "status": "draft",
-  "conversation_id": null,
+  "status": "accepted",
+  "conversation_id": "ff6fc3ab-48bf-4039-bc14-77662d8ad6ca",
   "history": [
     {
       "at": "2026-11-05T14:54:35",
       "status": "draft",
       "note": "Claude tạo task"
+    },
+    {
+      "at": "2026-11-05T15:00:07",
+      "status": "assigned",
+      "note": "giao qua agy (gemini-3.8-flash-high)"
+    },
+    {
+      "at": "2026-11-05T15:00:22",
+      "status": "in_progress",
+      "note": "Antigravity nhận việc"
+    },
+    {
+      "at": "2026-11-05T15:26:33",
+      "status": "submitted",
+      "note": "Antigravity nộp, verify.sh đạt"
+    },
+    {
+      "at": "2026-11-05T15:30:53",
+      "status": "accepted",
+      "note": "Claude nghiệm thu"
     }
-  ]
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-049-agent-accounts-server/verify.sh",
+    "internal/database/migrate006_test.go",
+    "internal/dispatcher/accounts_test.go",
+    "internal/api/fleet_accounts_test.go",
+    "internal/machines/accounts_test.go",
+    "internal/gateway/accounts_test.go",
+    "internal/office/accounts_test.go"
+  ],
+  "via": "agy"
 }

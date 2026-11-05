@@ -407,7 +407,8 @@ func main() {
 				_ = disp.Disconnect(workerID)
 			}
 		},
-		Recheck: hub.SendAuthRecheck,
+		Recheck:     hub.SendAuthRecheck,
+		RemoveAgent: disp.RemoveAgent,
 	}, func(r *http.Request) (string, bool) {
 		u, ok := auth.UserFrom(r.Context())
 		return u.ID, ok

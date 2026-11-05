@@ -19,6 +19,7 @@ import (
 	_ "embed"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/namth/agenthub/internal/dispatcher"
 	"github.com/namth/agenthub/internal/gateway"
 )
 
@@ -26,13 +27,14 @@ import (
 var installScriptTmpl string
 
 type Config struct {
-	BaseURL    func() string
-	RunnersDir string
-	Now        func() time.Time
-	IsOwner    func(userID string) bool
-	IsMember   func(userID, projectID string) bool
-	OnRemoved  func(workerID string)
-	Recheck    func(workerID, agentID string) bool
+	BaseURL     func() string
+	RunnersDir  string
+	Now         func() time.Time
+	IsOwner     func(userID string) bool
+	IsMember    func(userID, projectID string) bool
+	OnRemoved   func(workerID string)
+	Recheck     func(workerID, agentID string) bool
+	RemoveAgent func(agentID string) error
 }
 
 func (c *Config) now() time.Time {
@@ -411,13 +413,14 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 			}
 
 			_, err = db.Exec(`
-				INSERT INTO agents (id, worker_id, kind, status, lead_eligible)
-				VALUES (?, ?, ?, 'IDLE', ?)
+				INSERT INTO agents (id, worker_id, kind, name, status, lead_eligible, ever_ok)
+				VALUES (?, ?, ?, ?, 'IDLE', ?, 0)
 				ON CONFLICT(id) DO UPDATE SET
 					worker_id = excluded.worker_id,
 					kind = excluded.kind,
+					name = excluded.name,
 					lead_eligible = excluded.lead_eligible
-			`, agentID, workerID, agUpper, agentLeadEligible)
+			`, agentID, workerID, agUpper, agLower, agentLeadEligible)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
 				return
@@ -498,6 +501,7 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 
 		type agentDTO struct {
 			ID            string         `json:"id"`
+			Name          string         `json:"name"`
 			Kind          string         `json:"kind"`
 			Status        string         `json:"status"`
 			AuthStatus    string         `json:"auth_status"`
@@ -534,11 +538,11 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 			}
 			m.Agents = make([]agentDTO, 0)
 
-			// Query agents của worker
+			// Query agents của worker (chỉ agent ever_ok = 1 AND removed_at IS NULL)
 			agRows, err := db.Query(`
-				SELECT id, kind, status, auth_status, auth_detail, auth_checked_at
+				SELECT id, name, kind, status, auth_status, auth_detail, auth_checked_at
 				FROM agents
-				WHERE worker_id = ?
+				WHERE worker_id = ? AND ever_ok = 1 AND removed_at IS NULL
 				ORDER BY id
 			`, m.ID)
 			if err != nil {
@@ -548,11 +552,20 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 
 			for agRows.Next() {
 				var ag agentDTO
+				var nameVal sql.NullString
 				var authDetail, authCheckedAt sql.NullString
-				if err := agRows.Scan(&ag.ID, &ag.Kind, &ag.Status, &ag.AuthStatus, &authDetail, &authCheckedAt); err != nil {
+				if err := agRows.Scan(&ag.ID, &nameVal, &ag.Kind, &ag.Status, &ag.AuthStatus, &authDetail, &authCheckedAt); err != nil {
 					agRows.Close()
 					writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
 					return
+				}
+				if nameVal.Valid && nameVal.String != "" {
+					ag.Name = nameVal.String
+				} else {
+					idx := strings.Index(ag.ID, "/")
+					if idx >= 0 && idx+1 < len(ag.ID) {
+						ag.Name = ag.ID[idx+1:]
+					}
 				}
 				if authDetail.Valid && authDetail.String != "" {
 					ag.AuthDetail = &authDetail.String
@@ -881,6 +894,68 @@ Ràng buộc: không in/gửi token; không dùng chế độ bỏ qua quyền (
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// DELETE /api/my/machines/{id}/agents/{name}
+	r.Delete("/api/my/machines/{id}/agents/{name}", func(w http.ResponseWriter, req *http.Request) {
+		userID, ok := authz(req)
+		if !ok || userID == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+			return
+		}
+
+		machineID := chi.URLParam(req, "id")
+		agentName := chi.URLParam(req, "name")
+
+		var ownerID sql.NullString
+		err := db.QueryRow("SELECT owner_user_id FROM workers WHERE id = ?", machineID).Scan(&ownerID)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "machine not found")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
+			return
+		}
+
+		isSelf := ownerID.Valid && ownerID.String == userID
+		if !isSelf && !cfg.isOwner(userID) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+			return
+		}
+
+		var foundAgentID string
+		err = db.QueryRow(
+			"SELECT id FROM agents WHERE worker_id = ? AND (name = ? OR id = ?) AND removed_at IS NULL",
+			machineID, agentName, machineID+"/"+agentName,
+		).Scan(&foundAgentID)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "agent not found")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "database error")
+			return
+		}
+
+		if cfg.RemoveAgent == nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "RemoveAgent not configured")
+			return
+		}
+
+		err = cfg.RemoveAgent(foundAgentID)
+		if errors.Is(err, dispatcher.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "agent not found")
+			return
+		}
+		if errors.Is(err, dispatcher.ErrConflict) {
+			writeError(w, http.StatusConflict, "CONFLICT", "agent is busy with a job")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to remove agent")
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"removed": foundAgentID})
 	})
 
 	return r

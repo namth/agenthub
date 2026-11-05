@@ -250,6 +250,12 @@ func (h *Hub) Notify(ev dispatcher.Event) {
 			"event": "JOB_AVAILABLE",
 		})
 
+	case dispatcher.EvAgentRemoved:
+		payload, err = json.Marshal(map[string]any{
+			"event":    "AGENT_REMOVE",
+			"agent_id": ev.AgentID,
+		})
+
 	default:
 		return
 	}
@@ -272,9 +278,9 @@ func (h *Hub) Notify(ev dispatcher.Event) {
 		return
 	}
 
-	targetWorker := workerFromAgentID(ev.AgentID)
+	targetWorker := ev.WorkerID
 	if targetWorker == "" {
-		targetWorker = ev.WorkerID
+		targetWorker = workerFromAgentID(ev.AgentID)
 	}
 
 	var targetConn *clientConn
