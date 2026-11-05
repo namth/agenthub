@@ -40,6 +40,7 @@ TC-83 → TC-89: xem [features/ops-readiness.md](features/ops-readiness.md) §8 
 
 ### 1.11 Điều hành mọi nơi (FEAT-10)
 TC-90 → TC-96: xem [features/remote-command.md](features/remote-command.md) §8 (lệnh Telegram owner, token cá nhân, MCP, REPLAN hành động, responsive 375px).
+TC-97 → TC-103: xem [features/agent-accounts.md](features/agent-accounts.md) §8 (migration 006, nhiều tài khoản cùng loại, `ever_ok`, xoá agent, runner `agents.json`). Văn phòng bản 3: [features/virtual-office.md](features/virtual-office.md) §10.
 
 ---
 

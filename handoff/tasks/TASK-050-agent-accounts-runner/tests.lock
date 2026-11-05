@@ -1,0 +1,3 @@
+f7f41eccef5718f5c0a65271a26115ba26a429ca63ee841236511c65b0643faf  handoff/tasks/TASK-050-agent-accounts-runner/verify.sh
+f4d67a5b20d2eb3a1c3eb5e92f9ace091de2b26c2cb160a995266eadfabad822  internal/runner/accounts_test.go
+551cec4dfa19f6f770de24d64fbd0e5b6e4b65f941796be3015e46fa45b7d56a  internal/machines/install_accounts_test.go

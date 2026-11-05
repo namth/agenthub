@@ -151,6 +151,20 @@ DoD chi tiết ở §9 của [clarification-and-shared-skills.md](features/clari
 - [x] **TASK-047: Web responsive 375px** — TC-96
 - [x] **TASK-048: REPLAN/UNBLOCK có hành động + `lead_proposals`** — TC-94, TC-95
 
+### Milestone 7: Tài khoản agent linh động + văn phòng bản 3 (FEAT-11, FEAT-02 bản 3, đặc tả 2026-11-05)
+
+| Task | Nội dung | Trạng thái |
+| :--- | :--- | :--- |
+| TASK-049 | Server: migration 006, HELLO theo `name`/`ever_ok`, xoá agent + `AGENT_REMOVE` | done |
+| TASK-050 | Runner: `agents.json`, `agenthub account …`, `install.sh` chỉ ghi CLI đã OK | done |
+| TASK-051 | Web: xoá agent SCR-05/SCR-11 + văn phòng bản 3 | done (trưởng phòng tự làm: agy máy chính hết hạn mức tới 08/11, macbook đang chạy 049/050) |
+
+- [x] **TASK-049** — TC-97 → TC-100 · `go test ./internal/... -race`
+- [x] **TASK-050** — TC-101, TC-102 · `go test ./internal/runner ./internal/machines -race`
+- [x] **TASK-051** — TC-103 + `web/src/office/office_v3.test.tsx` · `cd web && npx vitest run && npx tsc -b --noEmit && npm run build`, ảnh chụp `/office` thật
+
+**Thứ tự:** 049 ∥ 050 (giao thức HELLO/`AGENT_REMOVE` chốt trong [features/agent-accounts.md](features/agent-accounts.md) §6) → 051. DoD ở §9 của file đó và [features/virtual-office.md](features/virtual-office.md) §10.
+
 **Thứ tự & phạm vi file:** TASK-036 → (041 `internal/projects`+`internal/runner` exec ∥ 043 `internal/dispatcher` ∥ 037 `internal/skills`+`internal/runner` worktree) — 041 và 037/042 cùng `internal/runner` nên chạy nối tiếp nhau → 042 → 044 → 038 → 039 ∥ 040 → 045 ∥ 046 ∥ 047 → 048.
 
 **Trưởng phòng tự làm (ngoài handoff):** nối dây `cmd/server/main.go`; sự kiện `JOB_ASSIGNED/SUBMITTED`; giết cả nhóm tiến trình khi huỷ CLI; `Reconcile` bù job còn thiếu (30 giây/lần); nút Merge trên SCR-04; sửa route `/office`; test trọn dây chuyền `internal/e2e`.

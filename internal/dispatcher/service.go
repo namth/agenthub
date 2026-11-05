@@ -54,6 +54,7 @@ func newID(prefix string) string {
 var (
 	reSecretPrefix = regexp.MustCompile(`(ghp_|gho_|sk-)\S*`)
 	reLongSecret   = regexp.MustCompile(`\S{32,}`)
+	reAgentName    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 )
 
 func sanitizeDetail(s string) string {
@@ -176,7 +177,53 @@ func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]A
 		if h.Kind == "" {
 			continue
 		}
-		agentID := workerID + "/" + strings.ToLower(h.Kind)
+		name := h.Name
+		if name == "" {
+			name = strings.ToLower(h.Kind)
+		}
+		if !reAgentName.MatchString(name) {
+			continue
+		}
+		agentID := workerID + "/" + name
+
+		// Kiểm tra tombstone & ever_ok hiện tại trong DB
+		var removedAt any
+		var existingEverOK int
+		rowErr := tx.QueryRow("SELECT removed_at, ever_ok FROM agents WHERE id = ?", agentID).Scan(&removedAt, &existingEverOK)
+		if rowErr == nil && removedAt != nil {
+			// Đã xoá -> bỏ qua (không hồi sinh, không xoá tombstone)
+			continue
+		}
+
+		everOK := 1
+		if rowErr != nil && errors.Is(rowErr, sql.ErrNoRows) {
+			// Hàng mới
+			if h.EverOK != nil {
+				if *h.EverOK || h.AuthStatus == AuthOK {
+					everOK = 1
+				} else {
+					everOK = 0
+				}
+			} else {
+				if h.AuthStatus == AuthOK {
+					everOK = 1
+				} else {
+					everOK = 1
+				}
+			}
+		} else {
+			// Hàng đã có: không bao giờ hạ 1 -> 0
+			if existingEverOK == 1 {
+				everOK = 1
+			} else {
+				if (h.EverOK != nil && *h.EverOK) || h.AuthStatus == AuthOK {
+					everOK = 1
+				} else {
+					everOK = 0
+				}
+			}
+		}
+
 		cleanDetail := sanitizeDetail(h.AuthDetail)
 		var detailVal any = cleanDetail
 		if cleanDetail == "" {
@@ -190,21 +237,24 @@ func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]A
 
 		if h.AuthStatus == "" {
 			_, err = tx.Exec(
-				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, lead_eligible)
-				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?)
-				 ON CONFLICT(worker_id, kind) DO UPDATE SET idle_since = COALESCE(agents.idle_since, excluded.idle_since)`,
-				agentID, workerID, h.Kind, nowStr, nowStr, leadEligible,
+				`INSERT INTO agents (id, worker_id, kind, name, status, idle_since, created_at, lead_eligible, ever_ok)
+				 VALUES (?, ?, ?, ?, 'IDLE', ?, ?, ?, ?)
+				 ON CONFLICT(id) DO UPDATE SET
+					idle_since = COALESCE(agents.idle_since, excluded.idle_since),
+					ever_ok = CASE WHEN agents.ever_ok = 1 THEN 1 ELSE excluded.ever_ok END`,
+				agentID, workerID, h.Kind, name, nowStr, nowStr, leadEligible, everOK,
 			)
 		} else {
 			_, err = tx.Exec(
-				`INSERT INTO agents (id, worker_id, kind, status, idle_since, created_at, auth_status, auth_detail, auth_checked_at, lead_eligible)
-				 VALUES (?, ?, ?, 'IDLE', ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(worker_id, kind) DO UPDATE SET
+				`INSERT INTO agents (id, worker_id, kind, name, status, idle_since, created_at, auth_status, auth_detail, auth_checked_at, lead_eligible, ever_ok)
+				 VALUES (?, ?, ?, ?, 'IDLE', ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(id) DO UPDATE SET
 					idle_since = COALESCE(agents.idle_since, excluded.idle_since),
 					auth_status = excluded.auth_status,
 					auth_detail = excluded.auth_detail,
-					auth_checked_at = excluded.auth_checked_at`,
-				agentID, workerID, h.Kind, nowStr, nowStr, h.AuthStatus, detailVal, nowStr, leadEligible,
+					auth_checked_at = excluded.auth_checked_at,
+					ever_ok = CASE WHEN agents.ever_ok = 1 THEN 1 ELSE excluded.ever_ok END`,
+				agentID, workerID, h.Kind, name, nowStr, nowStr, h.AuthStatus, detailVal, nowStr, leadEligible, everOK,
 			)
 		}
 		if err != nil {
@@ -225,7 +275,7 @@ func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]A
 
 	// 5. Trả danh sách agent của worker
 	rows, err := s.db.Query(
-		"SELECT id, worker_id, kind, status, cooldown_until, auth_status FROM agents WHERE worker_id = ? ORDER BY id",
+		"SELECT id, name, worker_id, kind, status, cooldown_until, auth_status FROM agents WHERE worker_id = ? AND ever_ok = 1 AND removed_at IS NULL ORDER BY id",
 		workerID,
 	)
 	if err != nil {
@@ -237,8 +287,12 @@ func (s *Service) ConnectAuth(workerID, ghAuth string, agents []AgentHello) ([]A
 	for rows.Next() {
 		var a Agent
 		var cdVal any
-		if err := rows.Scan(&a.ID, &a.WorkerID, &a.Kind, &a.Status, &cdVal, &a.AuthStatus); err != nil {
+		var nameVal sql.NullString
+		if err := rows.Scan(&a.ID, &nameVal, &a.WorkerID, &a.Kind, &a.Status, &cdVal, &a.AuthStatus); err != nil {
 			return nil, err
+		}
+		if nameVal.Valid {
+			a.Name = nameVal.String
 		}
 		a.CooldownUntil = parseDBTime(cdVal)
 		result = append(result, a)
@@ -1045,20 +1099,24 @@ func (s *Service) RequestJob(workerID, agentID string) (*Assignment, error) {
 
 	// 1. Kiểm tra agent tồn tại
 	var agWorker, kind, status, authStatus, connStatus, ghAuth string
-	var paused int
+	var paused, everOK int
+	var removedAt any
 	var ownerUserID, userRole sql.NullString
 	err := s.db.QueryRow(`
 		SELECT a.worker_id, a.kind, a.status, w.paused, a.auth_status, w.conn_status, w.gh_auth,
-		       w.owner_user_id, u.role
+		       w.owner_user_id, u.role, a.ever_ok, a.removed_at
 		FROM agents a
 		JOIN workers w ON a.worker_id = w.id
 		LEFT JOIN users u ON w.owner_user_id = u.id
-		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused, &authStatus, &connStatus, &ghAuth, &ownerUserID, &userRole)
+		WHERE a.id = ?`, agentID).Scan(&agWorker, &kind, &status, &paused, &authStatus, &connStatus, &ghAuth, &ownerUserID, &userRole, &everOK, &removedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if removedAt != nil || everOK == 0 {
+		return nil, nil
 	}
 
 	// 2. Kiểm tra quyền sở hữu
@@ -1753,8 +1811,9 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 
 	// 1. Kiểm tra agent tồn tại
 	var kind, status, workerID, authStatus string
-	var leadEligible int
-	err := s.db.QueryRow("SELECT kind, status, worker_id, lead_eligible, auth_status FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID, &leadEligible, &authStatus)
+	var leadEligible, everOK int
+	var removedAt any
+	err := s.db.QueryRow("SELECT kind, status, worker_id, lead_eligible, auth_status, ever_ok, removed_at FROM agents WHERE id = ?", agentID).Scan(&kind, &status, &workerID, &leadEligible, &authStatus, &everOK, &removedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Lease{}, ErrNotFound
 	}
@@ -1771,7 +1830,7 @@ func (s *Service) AdminAssign(agentID string) (Lease, error) {
 	}
 
 	// 3. Đủ điều kiện (BR-06, BR-32, BR-33, BR-37, DEC-29: bỏ điều kiện kind = CLAUDE)
-	if status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 || authStatus == AuthNeeds || ghAuth == AuthNeeds {
+	if status != "IDLE" || connStatus != "ONLINE" || paused != 0 || leadEligible != 1 || authStatus == AuthNeeds || ghAuth == AuthNeeds || everOK != 1 || removedAt != nil {
 		return Lease{}, ErrAgentNotEligible
 	}
 
@@ -1930,7 +1989,7 @@ func (s *Service) revokeLeadLocked(reason string, banAgent bool) ([]Event, error
 		s.isVacant = true
 		var cdVal any
 		_ = s.db.QueryRow(
-			"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+			"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL AND ever_ok = 1 AND removed_at IS NULL",
 		).Scan(&cdVal)
 		until := parseDBTime(cdVal)
 		events = append(events, Event{
@@ -1975,7 +2034,8 @@ func (s *Service) tryAssignLeaseLocked(excludeAgent string) ([]Event, error) {
 		 JOIN workers w ON a.worker_id = w.id
 		 WHERE a.status = 'IDLE' AND w.conn_status = 'ONLINE'
 		   AND w.paused = 0 AND a.lead_eligible = 1
-		   AND a.auth_status <> 'NEEDS_AUTH' AND w.gh_auth <> 'NEEDS_AUTH'`,
+		   AND a.auth_status <> 'NEEDS_AUTH' AND w.gh_auth <> 'NEEDS_AUTH'
+		   AND a.ever_ok = 1 AND a.removed_at IS NULL`,
 	)
 	if err != nil {
 		return nil, err
@@ -2103,4 +2163,72 @@ func (s *Service) tryAssignLeaseLocked(excludeAgent string) ([]Event, error) {
 	})
 
 	return events, nil
+}
+
+func (s *Service) RemoveAgent(agentID string) error {
+	var events []Event
+	s.mu.Lock()
+	defer func() {
+		s.mu.Unlock()
+		s.notify(events)
+	}()
+
+	now := s.clk.Now()
+	nowStr := s.formatTime(now)
+
+	var workerID string
+	var removedAt any
+	err := s.db.QueryRow("SELECT worker_id, removed_at FROM agents WHERE id = ?", agentID).Scan(&workerID, &removedAt)
+	if errors.Is(err, sql.ErrNoRows) || removedAt != nil {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	var activeCount int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM assignments WHERE agent_id = ? AND status = 'ACTIVE'", agentID).Scan(&activeCount)
+	if err != nil {
+		return err
+	}
+	if activeCount > 0 {
+		return ErrConflict
+	}
+
+	var leaseState string
+	var leaseAgent sql.NullString
+	_ = s.db.QueryRow("SELECT state, agent_id FROM lead_lease WHERE id = 1").Scan(&leaseState, &leaseAgent)
+	if leaseState == "HELD" && leaseAgent.Valid && leaseAgent.String == agentID {
+		evs, err := s.revokeLeadLocked(RevokeAdmin, false)
+		if err != nil {
+			return err
+		}
+		events = append(events, evs...)
+	}
+
+	_, err = s.db.Exec("UPDATE agents SET removed_at = ?, status = 'IDLE' WHERE id = ?", nowStr, agentID)
+	if err != nil {
+		return err
+	}
+
+	events = append(events, Event{
+		Type:     EvAgentRemoved,
+		At:       now,
+		WorkerID: workerID,
+		AgentID:  agentID,
+	})
+
+	return nil
+}
+
+func (s *Service) Tombstoned(workerID string, ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		var dummy int
+		err := s.db.QueryRow("SELECT 1 FROM agents WHERE id = ? AND worker_id = ? AND removed_at IS NOT NULL", id, workerID).Scan(&dummy)
+		if err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
 }

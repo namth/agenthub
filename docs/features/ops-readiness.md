@@ -102,7 +102,7 @@ agy -p "<prompt>" --settings '{"permissions":{"allow":["command(git)","command(g
 | **BR-57** | Kiểm đăng nhập "thật": lúc bắt tay và 6 giờ/lần khi agent rảnh, runner chạy một prompt cực ngắn (`-p "Trả lời đúng một từ: OK"`, timeout 60s) cho agent có `probe_prompt`; lỗi khớp `auth_patterns` → `NEEDS_AUTH`; thành công → `OK`. Bổ sung `auth_patterns` mặc định: `failed to authenticate`, `oauth`, `session expired`, `token expired`, `could not be refreshed`. |
 | **BR-58** | Máy có `owner_user_id` là partner chỉ nhận job của dự án mà chủ máy có trong `project_members` (lọc cứng trong `RequestJob`, cộng với `agent_projects` nếu có). Chủ máy mất tư cách thành viên → assignment ACTIVE của máy đó ở dự án ấy `RECLAIMED` (không tăng attempt). Máy owner/hệ thống giữ quy tắc cũ. |
 | **BR-59** | Không gửi secret tới runner. `needs_ci_for_integration = 1` → prompt dặn agent không chạy test cần secret, dựa vào CI gate (TASK-09); QA không đánh `CHANGES` vì thiếu secret. |
-| **BR-60** | Chạy thử chỉ trên dự án `is_sandbox`; mỗi dự án tối đa 1 lần chạy cùng lúc; tối đa 30 phút; xong (đạt hay không) đóng PR + issue mẫu, không merge; job của lần chạy có `priority = 50` (chen trước việc thường). |
+| **BR-60** | Chạy thử chỉ trên dự án `is_sandbox`; mỗi dự án tối đa 1 lần chạy cùng lúc; tối đa 30 phút; xong (đạt hay không) đóng PR + issue mẫu, không merge; job của lần chạy có `priority = 50` (chen trước việc thường). Khi kết thúc (PASSED/FAILED/TIMEOUT): job còn `QUEUED` của task gốc và sub-task → `CANCELLED`, task chưa `DONE` → `REJECTED` (bổ sung 2026-11-05 sau lần chạy thật bị TIMEOUT để lại job CODE trong hàng đợi). Giới hạn: job đang `RUNNING` không bị dừng; nếu nó nộp muộn, pipeline chưa chặn việc sinh job kế tiếp cho task `REJECTED`. |
 
 ## 8. Test case
 
@@ -114,7 +114,7 @@ agy -p "<prompt>" --settings '{"permissions":{"allow":["command(git)","command(g
 | **TC-86** | Dispatcher | Máy partner (thành viên p1, không p2), job p2 QUEUED | Không nhận job p2; nhận job p1 |
 | **TC-87** | Dispatcher | Partner bị gỡ khỏi p1 khi máy đang chạy job p1 | Assignment `RECLAIMED`, attempt giữ nguyên, job về hàng đợi |
 | **TC-88** | API | PATCH allowlist có `sudo`, 41 dòng, ký tự lạ | `400 VALIDATION_ERROR` |
-| **TC-89** | Integration | Chạy thử với runner giả đi đủ SPEC → CODE → QA PASS; lần 2 khi lần 1 chưa xong | `PASSED`, 4 bước có thời gian, PR/issue mẫu được đóng; lần 2 `409` |
+| **TC-89** | Integration | Chạy thử với runner giả đi đủ SPEC → CODE → QA PASS; lần 2 khi lần 1 chưa xong | `PASSED`, 4 bước có thời gian, PR/issue mẫu được đóng; lần 2 `409`. TIMEOUT khi còn job CODE `QUEUED`: job → `CANCELLED`, task chưa DONE → `REJECTED`, việc của dự án khác không bị chạm (`internal/smoke/smoke_cleanup_test.go`) |
 
 ## 9. Task triển khai & DoD
 

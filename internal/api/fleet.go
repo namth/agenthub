@@ -102,6 +102,7 @@ type CurrentJobItem struct {
 
 type AgentItem struct {
 	ID              string          `json:"id"`
+	Name            string          `json:"name"`
 	Kind            string          `json:"kind"`
 	Status          string          `json:"status"`
 	CooldownUntil   *string         `json:"cooldown_until"`
@@ -183,6 +184,10 @@ func FleetHandler(db *sql.DB, d dispatcher.API, authz Authz) http.Handler {
 		handlePatchAgent(w, req, db, d)
 	})
 
+	r.Delete("/api/admin/agents/{id}", func(w http.ResponseWriter, req *http.Request) {
+		handleDeleteAgent(w, req, db, d)
+	})
+
 	return r
 }
 
@@ -214,7 +219,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 	// ETA = MIN(cooldown_until) của agent lead_eligible=1 đang COOLDOWN (mọi loại)
 	var minCdVal any
 	_ = db.QueryRow(
-		"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL",
+		"SELECT MIN(cooldown_until) FROM agents WHERE lead_eligible = 1 AND status = 'COOLDOWN' AND cooldown_until IS NOT NULL AND ever_ok = 1 AND removed_at IS NULL",
 	).Scan(&minCdVal)
 	fleetLead.ETA = formatRFC3339(minCdVal)
 
@@ -261,9 +266,9 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 		}
 		wk.Agents = make([]AgentItem, 0)
 
-		// Lấy agents của worker
+		// Lấy agents của worker (chỉ agent ever_ok = 1 AND removed_at IS NULL)
 		agentRows, err := db.Query(
-			"SELECT id FROM agents WHERE worker_id = ? ORDER BY id ASC",
+			"SELECT id FROM agents WHERE worker_id = ? AND ever_ok = 1 AND removed_at IS NULL ORDER BY id ASC",
 			wk.ID,
 		)
 		if err != nil {
@@ -300,6 +305,7 @@ func handleGetFleet(w http.ResponseWriter, req *http.Request, db *sql.DB, d disp
 
 func getAgentDetail(db *sql.DB, agentID string, now time.Time) (*AgentItem, error) {
 	var ag AgentItem
+	var nameVal sql.NullString
 	var cdVal any
 	var lp sql.NullInt64
 	var sm sql.NullInt64
@@ -308,12 +314,21 @@ func getAgentDetail(db *sql.DB, agentID string, now time.Time) (*AgentItem, erro
 	var authDetail, authCheckedAt sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours, lead_eligible, auth_status, auth_detail, auth_checked_at
+		`SELECT id, name, kind, status, cooldown_until, lead_priority, soft_max_jobs, soft_window_hours, lead_eligible, auth_status, auth_detail, auth_checked_at
 		 FROM agents WHERE id = ?`,
 		agentID,
-	).Scan(&ag.ID, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours, &leadEligibleInt, &authStatus, &authDetail, &authCheckedAt)
+	).Scan(&ag.ID, &nameVal, &ag.Kind, &ag.Status, &cdVal, &lp, &sm, &ag.SoftWindowHours, &leadEligibleInt, &authStatus, &authDetail, &authCheckedAt)
 	if err != nil {
 		return nil, err
+	}
+
+	if nameVal.Valid && nameVal.String != "" {
+		ag.Name = nameVal.String
+	} else {
+		idx := strings.Index(ag.ID, "/")
+		if idx >= 0 && idx+1 < len(ag.ID) {
+			ag.Name = ag.ID[idx+1:]
+		}
 	}
 
 	ag.AuthStatus = authStatus
@@ -708,4 +723,35 @@ func nowOf(d dispatcher.API) time.Time {
 		return c.Now()
 	}
 	return time.Now()
+}
+
+func handleDeleteAgent(w http.ResponseWriter, req *http.Request, db *sql.DB, d dispatcher.API) {
+	rawID := chi.URLParam(req, "id")
+	agentID, err := url.PathUnescape(rawID)
+	if err != nil || agentID == "" {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy agent")
+		return
+	}
+
+	remover, ok := d.(interface{ RemoveAgent(string) error })
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "dispatcher không hỗ trợ xoá agent")
+		return
+	}
+
+	err = remover.RemoveAgent(agentID)
+	if errors.Is(err, dispatcher.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "không tìm thấy agent")
+		return
+	}
+	if errors.Is(err, dispatcher.ErrConflict) {
+		writeError(w, http.StatusConflict, "CONFLICT", "agent đang bận việc")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "lỗi xoá agent")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"removed": agentID})
 }

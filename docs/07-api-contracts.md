@@ -143,4 +143,6 @@ Giao tiếp hai chiều thời gian thực giữa Go Orchestrator và Runner Cli
 * Payload đầy đủ: [features/agent-auth.md](features/agent-auth.md) §6.
 
 ## 3. API ĐA DỰ ÁN & MÁY (FEAT-04, FEAT-05)
+**FEAT-11 (2026-11-05):** `DELETE /api/admin/agents/{id}` (owner), `DELETE /api/my/machines/{id}/agents/{name}` (chủ máy); `409` khi agent đang chạy việc; WS `HELLO` `data.agents[]` thêm `name`, `ever_ok`; WS server→runner `AGENT_REMOVE {agent_id}`. Chi tiết: [features/agent-accounts.md](features/agent-accounts.md) §6.
+
 Chi tiết: [features/multi-project.md](features/multi-project.md) §6 và [features/join-machine.md](features/join-machine.md) §6. Gồm `GET /api/projects` (mỗi dự án có `open_tasks` = số task gốc chưa DONE/REJECTED), `GET /api/admin/github/repos`, `POST /api/admin/projects`, `PATCH /api/admin/projects/{id}`, `POST /api/admin/projects/{id}/webhook` (tạo lại webhook; GitHub lỗi → 502 `GITHUB_ERROR`), `GET /api/tasks?project_id=`, `POST /api/fleet/join-codes`, `POST /api/fleet/join`, `GET /install.sh`, `GET /download/agenthub-{os}-{arch}`, `GET/PATCH/DELETE /api/my/machines/{id}`, `GET /api/contributions`, `GET /api/contributions/timeline`; WS `ASSIGN_TASK.payload.repo`, `HANDSHAKE.data.version`, `HANDSHAKE_OK.server_version`.

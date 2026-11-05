@@ -77,3 +77,4 @@ agenthub/
 | FEAT-07 & 08 | Phỏng vấn làm rõ yêu cầu & kỹ năng trưởng phòng nhúng runner | [features/clarification-and-shared-skills.md](docs/features/clarification-and-shared-skills.md) |
 | FEAT-09 | Vận hành thật & an toàn đa partner | [features/ops-readiness.md](docs/features/ops-readiness.md) |
 | FEAT-10 | Điều hành từ mọi nơi (Telegram, MCP, điện thoại) & REPLAN có hành động | [features/remote-command.md](docs/features/remote-command.md) |
+| FEAT-11 | Tài khoản agent linh động theo máy (nhiều tài khoản cùng loại, ẩn khi chưa đăng nhập, xoá agent) | [features/agent-accounts.md](docs/features/agent-accounts.md) |
