@@ -1,6 +1,6 @@
 # FEAT-11: Tài khoản agent linh động theo máy
 
-> Trạng thái: SPEC_APPROVED (2026-11-05) · Quyết định: DEC-41, DEC-42, DEC-43 · Sửa FEAT-05 (join máy), FEAT-06 (trạng thái đăng nhập)
+> Trạng thái: DONE (2026-11-05) · Quyết định: DEC-41, DEC-42, DEC-43 · Sửa FEAT-05 (join máy), FEAT-06 (trạng thái đăng nhập)
 
 ## 1. Tổng quan & mục tiêu nghiệp vụ
 
@@ -107,7 +107,7 @@ Dữ liệu cũ: `name` = phần sau `/` của `id`; `ever_ok = 1` nếu `auth_s
 | Mã | Quy tắc |
 | :--- | :--- |
 | **BR-66** | Agent id = `<worker_id>/<name>`, `name` khớp `^[a-z0-9][a-z0-9-]{0,31}$`, duy nhất trong máy. Mặc định `name` = kind viết thường (tương thích id cũ). `account add` chọn tên kế tiếp chưa dùng (`claude-2`, `claude-3`…), không tái dùng tên đã xoá trên máy đó. |
-| **BR-67** | Runner chỉ báo agent trong `HELLO` khi `ever_ok = true`. `ever_ok` bật khi probe đăng nhập OK hoặc một job của agent hoàn tất. `install.sh` chỉ ghi vào `agents.json` CLI đã probe OK. |
+| **BR-67** | Runner chỉ báo agent trong `HELLO` khi `ever_ok = true`. `ever_ok` bật khi probe đăng nhập OK hoặc một job của agent hoàn tất. `install.sh` chỉ ghi vào `agents.json` CLI đã probe OK; probe chạy với stdin `/dev/null` (script chạy kiểu `curl … | sh`, CLI đọc stdin sẽ nuốt phần còn lại của script). |
 | **BR-68** | Server: `ever_ok` đã là 1 thì không bao giờ về 0. Dispatcher không giao việc cho agent `ever_ok = 0`, `removed_at` khác NULL hoặc `NEEDS_AUTH`. |
 | **BR-69** | Xoá agent: chỉ khi không có assignment ACTIVE; đặt `removed_at`, nhả lead nếu đang giữ, gửi `AGENT_REMOVE`. `HELLO` sau đó còn báo id này → bỏ qua và gửi lại `AGENT_REMOVE`. |
 | **BR-70** | Nhiều agent cùng loại trên một máy chạy song song độc lập, mỗi agent một slot, hạn mức và cooldown riêng (COOLDOWN của `claude` không chặn `claude-2`). |
