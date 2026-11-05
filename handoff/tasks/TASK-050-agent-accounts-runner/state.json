@@ -9,5 +9,10 @@
       "status": "draft",
       "note": "Claude tạo task"
     }
+  ],
+  "locked_files": [
+    "handoff/tasks/TASK-050-agent-accounts-runner/verify.sh",
+    "internal/runner/accounts_test.go",
+    "internal/machines/install_accounts_test.go"
   ]
 }
